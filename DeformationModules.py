@@ -5,7 +5,7 @@ import torch.nn as nn
 from   torch.nn import Parameter
 from torch.autograd import grad
 
-import useful_fun as fun
+import UsefulFunctions as fun
 
 
 # GD, Cont and Mom are vectors

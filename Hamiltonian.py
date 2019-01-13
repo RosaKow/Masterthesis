@@ -3,7 +3,7 @@ import numpy as np
 import torch.nn as nn
 from torch.autograd import grad
 
-import useful_fun as fun
+import UsefulFunctions as fun
 
 class Hamilt(nn.Module):
     def __init__(self, DefModule):
