@@ -14,7 +14,7 @@ class Hamilt(nn.Module):
     def apply_Mom(self, GD, MOM, Cont):
         speed = self.DefModule.action(GD, self.DefModule, GD, Cont)
         return fun.scal(MOM, speed)
-    
+
     def __call__(self, GD, MOM, Cont):
         "Computes the hamiltonian."
         

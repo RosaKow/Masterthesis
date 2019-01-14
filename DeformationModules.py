@@ -99,13 +99,19 @@ class Translations(Module):
         "Returns the cost."
         Cont_arr = Cont.view([-1, self.dim])
         GeoDesc_arr = GeoDesc.view([-1, self.dim])
-        cov_mat = K_xy(GeoDesc_arr, GeoDesc_arr, self.scale)
+        cov_mat = fun.K_xy(GeoDesc_arr, GeoDesc_arr, self.scale)
+        K_q = fun.K_xx(GeoDesc.view(-1, 1), self.scale)
         return 0.5*torch.tensor([Cont_arr[:,i] @ cov_mat @ Cont_arr[:,i] for i in range(self.dim)]).sum()
         
     
     def compute_geodesic_control(self, delta, GeoDesc):
         """ computes geodesic control from \delta \in H^\ast """
-        raise NotImplementedError
+        K_q = fun.K_xx(GeoDesc.view(-1, 1), self.scale)
+        cond = np.linalg.cond(K_q.detach().numpy())
+        if(cond >= 1e2):
+            print("Warning in Translation.compute_geodesic_control: Very high condition number for K_q:", cond)
+        X, _ = torch.gesv(delta.view(-1, 1), K_q)
+        return X
     
     def cost_inv(self, GeoDesc, Cont) :
         #GeoDesc_arr = GeoDesc.view([-1, self.dim])

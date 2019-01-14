@@ -26,5 +26,3 @@ def grid2vec(x, y):
 
 def vec2grid(vec, nx, ny):
     return vec.t()[0].view(nx, ny), vec.t()[1].view(nx, ny)
-
-

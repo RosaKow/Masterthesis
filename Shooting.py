@@ -8,7 +8,5 @@ def shoot(DefModule, GD, MOM, H_r, N):
         [d_GD, d_MOM] = grad(H_r(GD, MOM), [GD, MOM], create_graph=True)
         GD = GD + step* d_MOM
         MOM = MOM - step* d_GD
-        """print("It:", i)"""
-        "print(GD, MOM)"
     return GD, MOM
 
