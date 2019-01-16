@@ -9,7 +9,7 @@ class Hamilt(nn.Module):
     def __init__(self, DefModule):
         super(Hamilt, self).__init__()
         self.DefModule = DefModule
-        self.init_cont = torch.zeros([DefModule.dimCont], requires_grad=True)
+        self.init_cont = torch.zeros(DefModule.nb_pts, 2, requires_grad=True)
 
     def apply_Mom(self, GD, MOM, Cont):
         speed = self.DefModule.action(GD, self.DefModule, GD, Cont)
