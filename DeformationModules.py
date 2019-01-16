@@ -238,11 +238,11 @@ class Compound(Module):
     def compute_geodesic_control(self, delta, GeoDesc):
         """ computes geodesic control from \delta \in H^\ast """
         
-        list_cont = [self.Mod_list[i].compute_geodesic_control(delta, GeoDesc[self.indiceGeoDesc[i]:self.indiceGeoDesc[i+1]]) for i in range(self.Nb_mod)]
+        list_cont = [self.Mod_list[i].compute_geodesic_control(delta[self.indiceCont[i]:self.indiceCont[i+1]], GeoDesc[self.indiceGeoDesc[i]:self.indiceGeoDesc[i+1]]) for i in range(self.Nb_mod)]
         #print(list_cont)
         return torch.cat(list_cont)
 
-        
+    """    
     def cost_inv(self, GeoDesc, Cont):
         X = torch.zeros_like(Cont)
         for i in range(self.Nb_mod):
@@ -253,4 +253,4 @@ class Compound(Module):
             GeoDesc_i = GeoDesc[indminGeoDesc:indmaxGeoDesc].view(-1)
             X[indmin:indmax] = self.Mod_list[i].cost_inv(GeoDesc_i, Cont[indmin:indmax])
         return X
-
+    """
