@@ -13,6 +13,22 @@ def plot_momentum(GD, MOM, GD_final):
     plt.quiver(GD_np[:,0], GD_np[:,1], MOM_np[:,0], MOM_np[:,1], color=['r','b','g'], scale=21)
     plt.scatter(GD_final_np[:,0], GD_final_np[:,1], color=['r', 'b', 'g'], marker = 'x')
     plt.show()
+   
+
+def plot_momentum_List(GD_List, MOM_List):
+    "plots the momentum vectors and final GD points"
+      
+    plt.figure()
+    n=len(GD_List)
+    
+    for i in range(n):
+        GD_np = GD_List[i].detach().numpy().reshape([-1,2])
+        MOM_np = MOM_List[i].detach().numpy().reshape([-1,2])
+        
+        plt.quiver(GD_np[:,0], GD_np[:,1], MOM_np[:,0], MOM_np[:,1], color=['r','b','g'], scale=21)
+   
+    plt.show()
+    
     
 def plot_vectorfield(Mod, GD, MOM):
     "plots the vectorfield resulting from GD and Mom"
