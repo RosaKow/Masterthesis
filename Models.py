@@ -40,26 +40,34 @@ class Model(nn.Module):
         GD, MOM = self.getVars()
         return fidelity(self(), target) + self.getModuleCompound().cost(GD, self.H.Cont_geo(GD, MOM))
 
-    def fit(self, target, maxiter=100):
-        optimizer = torch.optim.SGD(self.parameters(), lr=0.0001, momentum=0.05)
-        #self.fit.nit = 0
-        #self.fit.breakloop = False
+    def fit(self, target, maxiter=100, tol=1e-7):
+        optimizer = torch.optim.Adam(self.parameters(), lr=0.0001)
+        self.nit = -1
+        self.breakloop = False
         costs = []
 
         def closure():
-            #self.fit.nit += 1
+            self.nit += 1
             optimizer.zero_grad()
             cost = self.cost(target)
-            cost.backward()
+
+            print("It:", self.nit, ", cost:", cost.item())
             costs.append(cost.item())
+            
+            cost.backward()
+
+            if(len(costs) > 1 and abs(costs[-1] - costs[-2]) < tol) or self.nit >= maxiter:
+                self.breakloop = True
+            
             return cost
 
         for i in range(0, maxiter):
             optimizer.step(closure)
 
-            if i%1 == 0:
-                print("It:", i, ", cost:", costs[-1])
+            if(self.breakloop):
+                break
 
+        print("End of the optimisation process")
         return costs
 
 

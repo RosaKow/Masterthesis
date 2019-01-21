@@ -20,5 +20,5 @@ def sampleFromGreyscale(filename, threshold=1e-3):
     alpha = img[ind[0], ind[1]]
     alpha = alpha / alpha.sum()
     
-    return torch.tensor(x, dtype=torch.float32), torch.tensor(alpha, dtype=torch.float32)
+    return torch.tensor(x, dtype=torch.get_default_dtype()), torch.tensor(alpha, dtype=torch.get_default_dtype())
 
