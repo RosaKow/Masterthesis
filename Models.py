@@ -27,9 +27,6 @@ class Model(nn.Module):
     def __call__(self, it=10):
         raise NotImplementedError
 
-    def H_r(self, GD, MOM):
-        return self.H(GD, MOM, self.H.Cont_geo(GD, MOM))
-
     def getVars(self):
         raise NotImplementedError
 
@@ -101,7 +98,7 @@ class ModelTranslationModuleRegistration(Model):
             
     def __call__(self, it = 10):
         GD_In, MOM_In = self.getVars()
-        GD_Out, MOM_Out = Shooting.shoot(self.modules, GD_In, MOM_In, self.H_r, it)
+        GD_Out, MOM_Out = Shooting.shoot(self.modules, GD_In, MOM_In, self.H, it)
         return GD_Out[0:self.data.shape[0]*self.dim].view(-1, self.dim), self.alpha
     
 
