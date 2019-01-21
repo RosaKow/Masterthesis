@@ -25,33 +25,40 @@ class Model(nn.Module):
         super().__init__()
 
     def __call__(self, it=10):
-        pass
+        raise NotImplementedError
 
     def H_r(self, GD, MOM):
         return self.H(GD, MOM, self.H.Cont_geo(GD, MOM))
+
+    def getVars(self):
+        raise NotImplementedError
+
+    def getModuleCompound(self):
+        raise NotImplementedError
     
     def cost(self, target):
-        return fidelity(self(), target)
+        GD, MOM = self.getVars()
+        return fidelity(self(), target) + self.getModuleCompound().cost(GD, self.H.Cont_geo(GD, MOM))
 
     def fit(self, target, maxiter=100):
-        optimizer = torch.optim.SGD(self.parameters(), lr=0.00001, momentum=0.005)
-        costs = np.zeros(maxiter)
+        optimizer = torch.optim.SGD(self.parameters(), lr=0.0001, momentum=0.05)
+        #self.fit.nit = 0
+        #self.fit.breakloop = False
+        costs = []
 
         def closure():
+            #self.fit.nit += 1
             optimizer.zero_grad()
-            self.data = self()[0]
             cost = self.cost(target)
-            cost.backward(retain_graph=True)
-
+            cost.backward()
+            costs.append(cost.item())
             return cost
 
         for i in range(0, maxiter):
-            costs[i] = self.cost(target)
-            
-            if i%1 == 0:
-                print("It:", i, ", cost:", costs[i])
-
             optimizer.step(closure)
+
+            if i%1 == 0:
+                print("It:", i, ", cost:", costs[-1])
 
         return costs
 
@@ -78,10 +85,15 @@ class ModelTranslationModuleRegistration(Model):
         else:
             self.translationGD = torch.nn.Parameter(translationGD)
 
+    def getVars(self):
+        return torch.cat((self.data.view(-1), self.translationGD), 0), torch.cat((self.silentMOM, self.translationMOM), 0)
 
+    def getModuleCompound(self):
+        return self.compound
+            
     def __call__(self, it = 10):
-        GD_In = torch.cat((self.data.view(-1), self.translationGD), 0)
-        MOM_In = torch.cat((self.silentMOM, self.translationMOM), 0)
+        GD_In, MOM_In = self.getVars()
         GD_Out, MOM_Out = Shooting.shoot(self.modules, GD_In, MOM_In, self.H_r, it)
         return GD_Out[0:self.data.shape[0]*self.dim].view(-1, self.dim), self.alpha
     
+
