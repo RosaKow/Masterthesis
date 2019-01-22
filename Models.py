@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim
 import numpy as np
+import itertools
 
 import DeformationModules
 import Hamiltonian
@@ -33,12 +34,14 @@ class Model(nn.Module):
     def getModuleCompound(self):
         raise NotImplementedError
     
-    def cost(self, target):
+    def cost(self, target, l=1.):
         GD, MOM = self.getVars()
-        return fidelity(self(), target) + self.getModuleCompound().cost(GD, self.H.Cont_geo(GD, MOM))
+        attach = l*fidelity(self(), target)
+        deformationCost = self.getModuleCompound().cost(GD, self.H.Cont_geo(GD, MOM))
+        return attach, deformationCost
 
-    def fit(self, target, maxiter=100, tol=1e-7):
-        optimizer = torch.optim.Adam(self.parameters(), lr=0.0001)
+    def fit(self, target, lr=1e-3, l=1., maxiter=100, tol=1e-7, logInterval=10):
+        optimizer = torch.optim.SGD(self.parameters(), lr=lr, momentum=0.05)
         self.nit = -1
         self.breakloop = False
         costs = []
@@ -46,16 +49,19 @@ class Model(nn.Module):
         def closure():
             self.nit += 1
             optimizer.zero_grad()
-            cost = self.cost(target)
+            attach, deformationCost = self.cost(target, 50.)
+            cost = attach + deformationCost
 
-            print("It:", self.nit, ", cost:", cost.item())
+            if(self.nit%logInterval == 0):
+                print("It: %d, deformation cost: %.6f, attach: %.6f. Total cost: %.6f" % (self.nit, deformationCost.detach().numpy(), attach.detach().numpy(), cost.detach().numpy()))
+
             costs.append(cost.item())
-            
+
             cost.backward()
 
             if(len(costs) > 1 and abs(costs[-1] - costs[-2]) < tol) or self.nit >= maxiter:
                 self.breakloop = True
-            
+
             return cost
 
         for i in range(0, maxiter):
@@ -72,7 +78,7 @@ class ModelTranslationModuleRegistration(Model):
     def __init__(self, sigma, dim, source, translationGD, fixedTranslationPoints = True):
         super().__init__()
         self.dim = dim
-        self.data = source[0]
+        self.data = source[0].requires_grad_()
         self.alpha = source[1]
         self.sigma = sigma
 
@@ -91,14 +97,51 @@ class ModelTranslationModuleRegistration(Model):
             self.translationGD = torch.nn.Parameter(translationGD)
 
     def getVars(self):
-        return torch.cat((self.data.view(-1), self.translationGD), 0), torch.cat((self.silentMOM, self.translationMOM), 0)
+        GD, MOM = torch.cat((self.data.view(-1), self.translationGD), 0), torch.cat((self.silentMOM, self.translationMOM), 0)
+        return GD, MOM
+
+    def shoot(self):
+        GD, MOM = self.getVars()
+        return Shooting.shoot(self.modules, GD, MOM, self.H, 10)
 
     def getModuleCompound(self):
         return self.compound
             
     def __call__(self, it = 10):
         GD_In, MOM_In = self.getVars()
-        GD_Out, MOM_Out = Shooting.shoot(self.modules, GD_In, MOM_In, self.H, it)
+        GD_Out, MOM_Out = Shooting.shoot(self.modules, GD_In.requires_grad_(), MOM_In.requires_grad_(), self.H, it)
         return GD_Out[0:self.data.shape[0]*self.dim].view(-1, self.dim), self.alpha
     
+
+class ModelCompoundRegistration(Model):
+    def __init__(self, dim, source, moduleList, GDList):
+        super(Model, self).__init__()
+        self.dim = dim
+        self.data = source[0]
+        self.alpha = source[1]
+        self.compound = DeformationModules.Compound([mod for sublist in [[DeformationModules.SilentPoints(self.dim, source[0].shape[0])], moduleList] for mod in sublist])
+        print(self.compound.Mod_list)
+        
+        self.GDList = torch.nn.ParameterList()
+        self.MOMList = torch.nn.ParameterList()
+        
+        for i in range(0, len(moduleList)):
+            self.GDList.append(torch.nn.Parameter(GDList[i]))
+            self.MOMList.append(torch.nn.Parameter(torch.zeros_like(GDList[i])))
+        
+    def getVars(self):
+        GD = self.data.view(-1)        
+        GD = torch.cat([GD, *self.GDList])
+        MOM = self.data.view(-1)
+        MOM = torch.cat([MOM, *self.MOMList])
+        return GD, MOM
+
+    def getModuleCompound(self):
+        return self.compound
+
+    def __call__(self, it = 10):
+        GD_In, MOM_In = self.getVars()
+        GD_Out, MOM_Out = Shooting.shoot(self.compound, GD_In, MOM_In, self.H, it)
+        #return GD_Out[0:
+        
 

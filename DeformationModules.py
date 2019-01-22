@@ -92,11 +92,11 @@ class Translations(Module):
 
 class SilentPoints(Module):
     """Module handling silent points."""
-    def __init__(self, d, nb_pts):
+    def __init__(self, dim, nb_pts):
         super(Module, self).__init__()
-        self.dim = d
+        self.dim = dim
         self.nb_pts = nb_pts
-        self.dimGD = d*nb_pts
+        self.dimGD = dim*nb_pts
         self.dimCont = 0
 
     def __call__(self, GeoDesc, Cont, Points) :
