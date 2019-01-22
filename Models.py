@@ -28,14 +28,23 @@ class Model(nn.Module):
     def __call__(self, it=10):
         raise NotImplementedError
 
-    def getVars(self):
+    def getVarTensor(self):
+        raise NotImplementedError
+
+    def getVarList(self):
         raise NotImplementedError
 
     def getModuleCompound(self):
         raise NotImplementedError
+
+    def shootTensor(self):
+        raise NotImplementedError
+
+    def shootList(self):
+        raise NotImplementedError
     
     def cost(self, target, l=1.):
-        GD, MOM = self.getVars()
+        GD, MOM = self.getVarTensor()
         attach = l*fidelity(self(), target)
         deformationCost = self.getModuleCompound().cost(GD, self.H.Cont_geo(GD, MOM))
         return attach, deformationCost
@@ -49,14 +58,13 @@ class Model(nn.Module):
         def closure():
             self.nit += 1
             optimizer.zero_grad()
-            attach, deformationCost = self.cost(target, 50.)
+            attach, deformationCost = self.cost(target, l)
             cost = attach + deformationCost
 
             if(self.nit%logInterval == 0):
                 print("It: %d, deformation cost: %.6f, attach: %.6f. Total cost: %.6f" % (self.nit, deformationCost.detach().numpy(), attach.detach().numpy(), cost.detach().numpy()))
 
             costs.append(cost.item())
-
             cost.backward()
 
             if(len(costs) > 1 and abs(costs[-1] - costs[-2]) < tol) or self.nit >= maxiter:
@@ -78,8 +86,8 @@ class ModelTranslationModuleRegistration(Model):
     def __init__(self, sigma, dim, source, translationGD, fixedTranslationPoints = True):
         super().__init__()
         self.dim = dim
-        self.data = source[0].requires_grad_()
-        self.alpha = source[1]
+        self.data = source[0].clone()
+        self.alpha = source[1].clone()
         self.sigma = sigma
 
         self.silentModule = DeformationModules.SilentPoints(self.dim, self.data.shape[0])
@@ -92,24 +100,36 @@ class ModelTranslationModuleRegistration(Model):
 
         self.translationGD = None
         if(fixedTranslationPoints):
-            self.translationGD = translationGD
+            self.translationGD = translationGD.clone().requires_grad_()
         else:
-            self.translationGD = torch.nn.Parameter(translationGD)
+            self.translationGD = torch.nn.Parameter(translationGD.clone())
 
-    def getVars(self):
-        GD, MOM = torch.cat((self.data.view(-1), self.translationGD), 0), torch.cat((self.silentMOM, self.translationMOM), 0)
-        return GD, MOM
+    def getVarTensor(self):
+        """Returns the variables from the problem (GDs and MOMs) as tensors."""
+        return torch.cat((self.data.view(-1), self.translationGD), 0), torch.cat((self.silentMOM, self.translationMOM), 0)
 
-    def shoot(self):
-        GD, MOM = self.getVars()
-        return Shooting.shoot(self.modules, GD, MOM, self.H, 10)
+    def getVarList(self):
+        """Returns the variables from the problem (GDs and MOMs) as lists."""
+        return [self.data.view(-1), self.translationGD], [self.silentMOM, self.translationMOM]
+
+    def shootTensor(self, it=10):
+        """Solves the shooting equations and returns the result as tensors."""
+        GD, MOM = self.getVarTensor()
+        return Shooting.shoot(self.compound, GD, MOM, self.H, it)
+
+    def shootList(self, it=10):
+        """Solves the shooting equations and returns the result as lists."""
+        GD, MOM = self.getVarTensor()
+        GD, MOM = Shooting.shoot(self.compound, GD, MOM, self.H, it)
+        return [GD.view(-1, self.dim)[0:self.data.shape[0]], GD.view(-1, self.dim)[self.data.shape[0]:-1]], [MOM.view(-1, self.dim)[0:self.data.shape[0]], MOM.view(-1, self.dim)[self.data.shape[0], -1]]
 
     def getModuleCompound(self):
         return self.compound
-            
+
     def __call__(self, it = 10):
-        GD_In, MOM_In = self.getVars()
-        GD_Out, MOM_Out = Shooting.shoot(self.modules, GD_In.requires_grad_(), MOM_In.requires_grad_(), self.H, it)
+        """Returns the projected data by the deformation modules."""
+        GD_In, MOM_In = self.getVarTensor()
+        GD_Out, MOM_Out = Shooting.shoot(self.modules, GD_In, MOM_In, self.H, it)
         return GD_Out[0:self.data.shape[0]*self.dim].view(-1, self.dim), self.alpha
     
 
@@ -129,7 +149,7 @@ class ModelCompoundRegistration(Model):
             self.GDList.append(torch.nn.Parameter(GDList[i]))
             self.MOMList.append(torch.nn.Parameter(torch.zeros_like(GDList[i])))
         
-    def getVars(self):
+    def getVarTensor(self):
         GD = self.data.view(-1)        
         GD = torch.cat([GD, *self.GDList])
         MOM = self.data.view(-1)
