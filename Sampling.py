@@ -5,7 +5,12 @@ import matplotlib.image
 def loadGreyscaleImage(filename):
     """Load grescale image from disk as an array of normalized float values."""
     img = matplotlib.image.imread(filename)
-    return 1. - img[:,:,0].astype(np.float64)
+    if(img.ndim == 2):
+        return 1. - img.astype(np.float64)
+    elif(img.ndim ==3):
+        return 1. - img[:,:,0].astype(np.float64)
+    else:
+        raise NotImplementedError
 
 """
 def sampleFromGreyscale(filename, threshold=1e-3, centered=False):
@@ -54,4 +59,10 @@ def sampleFromGreyscale(filename, threshold=1e-2, centered=False, normaliseWeigh
         alpha = alpha/np.sum(alpha)
     
     return torch.tensor(x, dtype=torch.get_default_dtype()), torch.tensor(alpha, dtype=torch.get_default_dtype())
-    
+
+
+def sampleFromShape2D(nbPts, shape, K):
+    """Simple rejection sampling algorithm with shape a list of points defining the shape, K a kernel. Returns nbPts from the distribution."""
+    minx, miny, maxx, maxy
+    for i in range(nbPts):
+        pass

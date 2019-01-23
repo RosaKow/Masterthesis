@@ -126,7 +126,7 @@ class ModelTranslationModuleRegistration(Model):
     def getModuleCompound(self):
         return self.compound
 
-    def __call__(self, it = 10):
+    def __call__(self, it=10):
         """Returns the projected data by the deformation modules."""
         GD_In, MOM_In = self.getVarTensor()
         GD_Out, MOM_Out = Shooting.shoot(self.modules, GD_In, MOM_In, self.H, it)
@@ -134,34 +134,61 @@ class ModelTranslationModuleRegistration(Model):
     
 
 class ModelCompoundRegistration(Model):
-    def __init__(self, dim, source, moduleList, GDList):
+    def __init__(self, dim, source, moduleList, GDList, fixed):
         super(Model, self).__init__()
         self.dim = dim
-        self.data = source[0]
-        self.alpha = source[1]
-        self.compound = DeformationModules.Compound([mod for sublist in [[DeformationModules.SilentPoints(self.dim, source[0].shape[0])], moduleList] for mod in sublist])
-        print(self.compound.Mod_list)
-        
-        self.GDList = torch.nn.ParameterList()
-        self.MOMList = torch.nn.ParameterList()
-        
-        for i in range(0, len(moduleList)):
-            self.GDList.append(torch.nn.Parameter(GDList[i]))
-            self.MOMList.append(torch.nn.Parameter(torch.zeros_like(GDList[i])))
-        
+        self.data = source[0].clone()
+        self.alpha = source[1].clone()
+
+        self.MOMData = torch.nn.Parameter(torch.zeros_like(self.data).view(-1))
+
+        self.GDParams, self.MOMParams = torch.nn.ParameterList(), torch.nn.ParameterList()
+        self.GDFixed = []
+        self.ModList = [DeformationModules.SilentPoints(self.dim, self.data.shape[0])]
+
+        for i in range(len(moduleList)):
+            if(fixed[i]):
+                self.GDFixed.append(GDList[i].clone().requires_grad_())
+                self.ModList.append(moduleList[i])
+
+        for i in range(len(moduleList)):
+            if(not fixed[i]):
+                self.GDParams.append(torch.nn.Parameter(GDList[i].clone()))
+                self.MOMParams.append(torch.nn.Parameter(torch.zeros_like(GDList[i])))
+                self.ModList.append(moduleList[i])
+
+        self.compound = DeformationModules.Compound(self.ModList)
+        self.H = Hamiltonian.Hamilt(self.compound)
+
     def getVarTensor(self):
-        GD = self.data.view(-1)        
-        GD = torch.cat([GD, *self.GDList])
-        MOM = self.data.view(-1)
-        MOM = torch.cat([MOM, *self.MOMList])
-        return GD, MOM
+        GDList = [self.data.view(-1), *self.GDFixed, *self.GDParams]
+        MOMList = [self.MOMData, torch.zeros(sum(a.shape[0] for a in self.GDFixed)), *self.MOMParams]
+        return torch.cat(GDList), torch.cat(MOMList)
+
+    def getVarList(self):
+        return [self.data.view(-1), *self.GDFixed, *self.GDParams], [self.MOMData, torch.zeros(sum(a.shape[0] for a in self.GDFixed)), *self.MOMParams]
+
+    def shootTensor(self, it=10):
+        GD_In, MOM_In = self.getVarTensor()
+        return Shooting.shoot(self.compound, GD_In, MOM_In, self.H, it)
+
+    def shootList(self, it=10):
+        """Solves the shooting equations and returns the result as lists."""
+        GD, MOM = self.getVarTensor()
+        GD, MOM = Shooting.shoot(self.compound, GD, MOM, self.H, it)
+        GDList = []
+        MOMList = []
+        for i in range(self.compound.Nb_mod):
+            GDList.append(GD[self.compound.indiceGeoDesc[i]:self.compound.indiceGeoDesc[i+1]])
+            MOMList.append(MOM[self.compound.indiceGeoDesc[i]:self.compound.indiceGeoDesc[i+1]])
+        return GDList, MOMList
 
     def getModuleCompound(self):
         return self.compound
 
     def __call__(self, it = 10):
-        GD_In, MOM_In = self.getVars()
+        GD_In, MOM_In = self.getVarTensor()
         GD_Out, MOM_Out = Shooting.shoot(self.compound, GD_In, MOM_In, self.H, it)
-        #return GD_Out[0:
+        return GD_Out.view(-1, self.dim)[0:self.data.shape[0]], self.alpha
         
 
