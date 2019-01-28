@@ -2,13 +2,15 @@ import numpy as np
 import torch
 import matplotlib.image
 
+import matplotlib.pyplot as plt
+
 def loadGreyscaleImage(filename):
     """Load grescale image from disk as an array of normalized float values."""
     img = matplotlib.image.imread(filename)
     if(img.ndim == 2):
-        return 1. - img.astype(np.float64)
+        return 1. - img
     elif(img.ndim ==3):
-        return 1. - img[:,:,0].astype(np.float64)
+        return 1. - img[:,:,0]
     else:
         raise NotImplementedError
 
@@ -41,14 +43,15 @@ def sampleFromGreyscale(filename, threshold=1e-2, centered=False, normaliseWeigh
 
     totalweight = np.sum(x)
     count = 0
-    for i in range(0, img.shape[0]):
-        for j in range(0, img.shape[1]):
-            if(img[j, i] < threshold):
+    print(img.shape)
+    for j in range(0, img.shape[1]):
+        for i in range(0, img.shape[0]):
+            if(img[img.shape[0] - i - 1, j] < threshold):
                 continue
-            
-            x[count, 1] = i/img.shape[1]
-            x[count, 0] = j/img.shape[0]
-            alpha[count] = img[j, i]
+
+            x[count, 0] = i/img.shape[0]
+            x[count, 1] = j/img.shape[1]
+            alpha[count] = img[img.shape[0] - i - 1, j]
 
             count = count + 1
 
