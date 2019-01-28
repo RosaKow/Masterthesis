@@ -43,7 +43,6 @@ def sampleFromGreyscale(filename, threshold=1e-2, centered=False, normaliseWeigh
 
     totalweight = np.sum(x)
     count = 0
-    print(img.shape)
     for j in range(0, img.shape[1]):
         for i in range(0, img.shape[0]):
             if(img[img.shape[0] - i - 1, j] < threshold):
