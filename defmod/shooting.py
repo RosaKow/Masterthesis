@@ -6,7 +6,7 @@ from torch.autograd import grad
 
 def shoot(gd, mom, h, n):
     step = 1. / n
-    for i in range(n) :
+    for i in range(n):
         [d_gd, d_mom] = grad(h(gd, mom, h.geodesic_controls(gd, mom)), [gd, mom], create_graph=True)
         gd = gd + step*d_mom
         mom = mom - step*d_gd

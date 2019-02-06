@@ -3,7 +3,7 @@ import numpy as np
 import torch.nn as nn
 from torch.autograd import grad
 
-from .usefulfunctions import scal
+from .kernels import scal
 
 class Hamiltonian(nn.Module):
     def __init__(self, def_module):

@@ -9,7 +9,9 @@ import matplotlib.pyplot as plt
 from .deformationmodules import SilentPoints, Translations, Compound
 from .hamiltonian import Hamiltonian
 from .shooting import shoot
-from .usefulfunctions import distances, scal, AABB
+from .usefulfunctions import AABB
+from .kernels import distances, scal
+from .sampling import sample_from_greyscale, sample_from_points
 
 
 def fidelity(a, b):
@@ -23,7 +25,7 @@ def fidelity(a, b):
     return cost
 
 
-def L2NormFidelity(a, b):
+def L2_norm_fidelity(a, b):
     return torch.dist(a, b)
 
 
@@ -52,9 +54,9 @@ class Model(nn.Module):
     def fidelity(self, target):
         raise NotImplementedError
     
-    def cost(self, target, l=1.):
+    def cost(self, target):
         gd, mom = self.get_var_tensor()
-        attach = l*self.fidelity(target)
+        attach = self.fidelity(target)
         deformation_cost = self.get_module_compound().cost(gd, self.H.geodesic_controls(gd, mom))
         return attach, deformation_cost
 
@@ -67,17 +69,19 @@ class Model(nn.Module):
         def closure():
             self.nit += 1
             optimizer.zero_grad()
-            attach, deformation_cost = self.cost(target, l)
+            attach, deformation_cost = self.cost(target)
+            attach = l*attach
             cost = attach + deformation_cost
 
             if(self.nit%log_interval == 0):
                 print("It: %d, deformation cost: %.6f, attach: %.6f. Total cost: %.6f" % (self.nit, deformation_cost.detach().numpy(), attach.detach().numpy(), cost.detach().numpy()))
 
             costs.append(cost.item())
-            cost.backward()
 
             if(len(costs) > 1 and abs(costs[-1] - costs[-2]) < tol) or self.nit >= max_iter:
-                self.breakloop = True
+                self.break_loop = True
+            else:
+                cost.backward()
 
             return cost
 
@@ -189,6 +193,7 @@ class ModelCompoundRegistration(Model):
 
     def shoot_tensor(self, it=10):
         gd_in, mom_in = self.get_var_tensor()
+        print(gd_in)
         return shoot(gd_in, mom_in, self.H, it)
 
     def shoot_list(self, it=10):
@@ -211,15 +216,15 @@ class ModelCompoundRegistration(Model):
         return gd_out.view(-1, self.dim)[0:self.init_points.shape[0]], self.alpha
         
 
-# class ModelCompoundImageRegistration(ModelCompoundRegistration):
-#     def __init__(self, dim, sourceImage, moduleList, GDList, fixed, threshold=0.5):
-#         self.data, self.alpha = Sampling.sampleFromGreyscale(sourceImage, threshold, True, True)
-#         super().__init__(dim, [self.data, self.alpha], moduleList, GDList, fixed)
+class ModelCompoundImageRegistration(ModelCompoundRegistration):
+    def __init__(self, dim, source_image, module_list, gd_list, fixed, threshold=0.5):
+        source = sample_from_greyscale(source_image, threshold, centered=False, normalise_weights=False, normalise_position=False)
+        sampled = sample_from_points(source, source_image.shape)
+        self.frame_res = source_image.shape
+        super().__init__(dim, source, module_list, gd_list, fixed)
 
-#     def fidelity(self, source, target):
-#         sampledImage = Sampling.sampleImageFromPoints(source, target.shape, aabb=fun.AABB(0., 1., 0.,
-#  1.))
-#         plt.imshow(sampledImage, extent=[0., 1., 0., 1.])
-#         plt.show()
-#         return L2NormFidelity(sampledImage, target)
+    def fidelity(self, target):
+        sampled_image = sample_from_points(self(), self.frame_res)
+        target = torch.flip(target, dims=[0])
+        return L2_norm_fidelity(sampled_image, target)
     
