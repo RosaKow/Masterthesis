@@ -77,7 +77,7 @@ class Model(nn.Module):
             cost.backward()
 
             if(len(costs) > 1 and abs(costs[-1] - costs[-2]) < tol) or self.nit >= max_iter:
-                self.breakloop = True
+                self.break_loop = True
 
             return cost
 
