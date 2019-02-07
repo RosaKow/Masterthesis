@@ -58,6 +58,11 @@ def load_and_sample_greyscale(filename, threshold=0., centered=False, normalise_
 
 
 def sample_from_points(points, frame_res):
+    """
+    Sample an image from a tensor of points.
+    Taken and adapted from https://gitlab.icm-institute.org/aramislab/deformetrica/blob/master/src/core/observations/deformable_objects/image.py
+    """
+    
     u, v = points[0][:, 0], points[0][:, 1]
 
     u1 = torch.floor(u).long()

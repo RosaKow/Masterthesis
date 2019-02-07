@@ -32,7 +32,6 @@ def gauss_kernel(sigma):
     def K(x, y, b):
         d = 2
         formula = 'Exp(-p*SqDist(x, y))*b'
-        #formula = 'b'
         variables = ['x = Vx('+str(d)+')',
                      'y = Vy('+str(d)+')',
                      'b = Vy('+str(d)+')',

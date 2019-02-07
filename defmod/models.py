@@ -193,7 +193,6 @@ class ModelCompoundRegistration(Model):
 
     def shoot_tensor(self, it=10):
         gd_in, mom_in = self.get_var_tensor()
-        print(gd_in)
         return shoot(gd_in, mom_in, self.H, it)
 
     def shoot_list(self, it=10):
@@ -227,4 +226,4 @@ class ModelCompoundImageRegistration(ModelCompoundRegistration):
         sampled_image = sample_from_points(self(), self.frame_res)
         target = torch.flip(target, dims=[0])
         return L2_norm_fidelity(sampled_image, target)
-    
+

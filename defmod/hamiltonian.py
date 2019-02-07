@@ -32,6 +32,7 @@ class Hamiltonian(nn.Module):
     # TODO: Find a better name for this function.
     # TODO: Manualy compute the gradient so we can use the torchdifeq library for the shooting.
     def geodesic_controls(self, gd, mom):
-        controls = grad(self.apply_mom(gd, mom, self.__init_controls), [self.__init_controls], create_graph=True)[0]
-        return self.__def_module.compute_geodesic_control(controls, gd) 
+        controls = grad(self.apply_mom(gd, mom, self.__init_controls),
+                        [self.__init_controls], create_graph=True)[0]
+        return self.__def_module.compute_geodesic_control(controls, gd)
 
