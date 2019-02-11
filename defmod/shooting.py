@@ -4,9 +4,9 @@ from torch.autograd import grad
 #from torchdiffeq import odeint_adjoint as odeint
 
 
-def shoot(gd, mom, h, n):
+def shoot(gd, mom, h, n=10):
     step = 1. / n
-    for i in range(n) :
+    for i in range(n):
         [d_gd, d_mom] = grad(h(gd, mom, h.geodesic_controls(gd, mom)), [gd, mom], create_graph=True)
         gd = gd + step*d_mom
         mom = mom - step*d_gd

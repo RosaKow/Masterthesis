@@ -4,8 +4,6 @@ import torch
 
 import defmod as dm
 
-it_count = 10
-
 class TestShooting(unittest.TestCase):
     def setUp(self):
         self.m = 10
@@ -15,7 +13,7 @@ class TestShooting(unittest.TestCase):
     def test_shooting(self):
         gd = torch.rand(self.m, 2, requires_grad=True)
         mom = torch.rand(self.m, 2, requires_grad=True)
-        gd_out, mom_out = dm.shooting.shoot(gd, mom, self.h, it_count)
+        gd_out, mom_out = dm.shooting.shoot(gd, mom, self.h)
 
         self.assertIsInstance(gd_out, torch.Tensor)
         self.assertIsInstance(mom_out, torch.Tensor)
@@ -26,9 +24,17 @@ class TestShooting(unittest.TestCase):
     def test_shooting_zero(self):
         gd = torch.rand(self.m, 2, requires_grad=True)
         mom = torch.zeros_like(gd, requires_grad=True)
-        gd_out, mom_out = dm.shooting.shoot(gd, mom, self.h, it_count)
+        gd_out, mom_out = dm.shooting.shoot(gd, mom, self.h)
 
         self.assertEqual(torch.all(torch.eq(gd, gd_out)), True)
         self.assertEqual(torch.all(torch.eq(mom, mom_out)), True)
+
+    def test_gradcheck_shoot(self):
+        gd = torch.rand(self.m, 2, requires_grad=True)
+        mom = torch.zeros_like(gd, requires_grad=True)
+
+        self.assertTrue(torch.autograd.gradcheck(dm.shooting.shoot, (gd, mom, self.h, 1), raise_exception=False))
+
+        
 
 
