@@ -72,12 +72,27 @@ class Translations(DeformationModule):
         #m = self.__K(gd_array, gd_array, controls_array)
         return 0.5*torch.dot(m.view(-1), controls.view(-1))
 
-
     def compute_geodesic_control(self, delta, gd):
         """Computes geodesic control from \delta \in H^\ast."""
         K_q = K_xx(gd.view(-1, self.__dim), self.__sigma)
         controls, _ = torch.gesv(delta.view(-1, self.__dim), K_q)
         return controls.contiguous().view(-1)
+
+    def cot_to_vs(self, gd, mom, sigma, points, j=0):
+        if(j is not 0):
+            raise NotImplemented("Translations.cot_to_vs() to order", j, "is not implemented!")
+
+        out = torch.zeros_like(points)
+        K = K_xy(gd.view(-1, self.dim), points, sigma)
+
+        for j in range(0, points.shape[0]):
+            for i in range(0, self.nb_pts):
+                out[j, :] += K[i, j]*mom.view(-1, self.dim)[i, :]
+
+        return out
+
+    def apply_adjoint(self, gd, module, gd_module, mom_module):
+        return module.cot_to_vs(gd_module, mom_module, self.sigma, gd.view(-1, self.dim)).view(-1)
 
 
 class SilentPoints(DeformationModule):
@@ -119,6 +134,22 @@ class SilentPoints(DeformationModule):
 
     def compute_geodesic_control(self, delta, gd):
         """Computes geodesic control from \delta \in H^\ast."""
+        return torch.tensor([])
+
+    def cot_to_vs(self, gd, mom, sigma, points, j=0):
+        if(j is not 0):
+            raise NotImplemented("Translations.cot_to_vs() to order", j, "is not implemented!")
+
+        out = torch.zeros_like(points)
+        K = K_xy(gd.view(-1, self.dim), points, sigma)
+
+        for j in range(0, points.shape[0]):
+            for i in range(0, self.nb_pts):
+                out[j, :] += K[i, j]*mom.view(-1, self.dim)[i, :]
+
+        return out
+
+    def apply_adjoint(self, gd, module, gd_module, mom_module):
         return torch.tensor([])
 
 
@@ -207,4 +238,30 @@ class Compound(DeformationModule):
             )
 
         return torch.cat(controls_list)
+
+    def cot_to_vs(self, gd, mom, sigma, points, j=0):
+        if(j is not 0):
+            raise NotImplemented("Compound.cot_to_vs() to order", j, "is not implemented!")
+
+        out = torch.zeros_like(points)
+
+        for i in range(0, self.__nb_module):
+            out += self.__module_list[i].cot_to_vs(
+                gd[self.__indice_gd[i]:self.__indice_gd[i+1]],
+                mom[self.__indice_gd[i]:self.__indice_gd[i+1]],
+                sigma, points)
+
+        return out
+
+    def apply_adjoint(self, gd, module, gd_module, mom_module):
+        out = torch.zeros_like(gd)
+
+        print("hhhh")
+
+        for i in range(0, self.__nb_module):
+            out[self.__indice_controls[i]:self.__indice_controls[i+1]] = \
+                self.__module_list[i].apply_adjoint(gd[self.__indice_gd[i]:self.__indice_gd[i+1]],
+                                                    module, gd_module, mom_module)
+
+        return out
 

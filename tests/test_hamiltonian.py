@@ -49,5 +49,5 @@ class TestHamiltonian(unittest.TestCase):
         self.gd.requires_grad_()
         self.mom.requires_grad_()
         self.assertTrue(torch.autograd.gradcheck(self.h.geodesic_controls, (self.gd, self.mom),
-                                                 raise_exception=False))
+                                                raise_exception=False))
 

@@ -8,7 +8,7 @@ torch.set_default_tensor_type(torch.DoubleTensor)
 
 class TestTranslations2D(unittest.TestCase):
     def setUp(self):
-        self.nb_pts = 4
+        self.nb_pts = 10
         self.dim = 2
         self.sigma = 0.5
         self.gd = torch.rand(self.nb_pts, self.dim).view(-1)
@@ -52,8 +52,27 @@ class TestTranslations2D(unittest.TestCase):
         self.assertIsInstance(result, torch.Tensor)
         self.assertEqual(self.gd.shape, result.shape)
 
+    def test_cot_to_vs(self):
+        points = torch.rand(10, self.dim, requires_grad=True)
+
+        result = self.trans.cot_to_vs(self.gd, self.mom, 1., points)
+
+        self.assertIsInstance(result, torch.Tensor)
+        self.assertEqual(result.shape, points.shape)
+
+    def test_apply_adjoint(self):
+        m = 8
+        module = dm.deformationmodules.Translations(self.dim, m, self.sigma)
+        gd_module = torch.rand(m, self.dim).view(-1)
+        mom_module = torch.rand(m, self.dim).view(-1)
+
+        result = self.trans.apply_adjoint(self.gd, module, gd_module, mom_module)
+
+        self.assertIsInstance(result, torch.Tensor)
+        self.assertEqual(result.shape, self.gd.shape)
+
     def test_gradcheck_call(self):
-        points = torch.rand(2, self.dim, requires_grad=True)
+        points = torch.rand(10, self.dim, requires_grad=True)
         self.gd.requires_grad_()
         self.controls.requires_grad_()
 
@@ -118,6 +137,25 @@ class TestSilentPoints2D(unittest.TestCase):
         
         self.assertIsInstance(result, torch.Tensor)
         self.assertEqual(result.shape, torch.tensor([]).shape)
+
+    def test_cot_to_vs(self):
+        points = torch.rand(10, self.dim, requires_grad=True)
+
+        result = self.silent_points.cot_to_vs(self.gd, self.mom, 1., points)
+
+        self.assertIsInstance(result, torch.Tensor)
+        self.assertEqual(result.shape, points.shape)
+
+    def test_apply_adjoint(self):
+        m = 10
+        module = dm.deformationmodules.Translations(self.dim, m, 1.)
+        gd_module = torch.rand(m, self.dim).view(-1)
+        mom_module = torch.rand(m, self.dim).view(-1)
+
+        result = self.silent_points.apply_adjoint(self.gd, module, gd_module, mom_module)
+
+        self.assertIsInstance(result, torch.Tensor)
+        self.assertEqual(result.shape, torch.Size([0]))
 
     def test_gradcheck_call(self):
         points = torch.rand(2, self.dim, requires_grad=True)
@@ -213,6 +251,26 @@ class CompoundTest2D(unittest.TestCase):
 
         self.assertIsInstance(result, torch.Tensor)
         self.assertEqual(result.shape, torch.Size([self.compound.dim_controls]))
+
+    def test_cot_to_vs(self):
+        points = torch.rand(10, self.dim, requires_grad=True)
+
+        result = self.compound.cot_to_vs(self.gd, self.mom, 1., points)
+
+        self.assertIsInstance(result, torch.Tensor)
+        self.assertEqual(result.shape, points.shape)
+
+    def test_apply_adjoint(self):
+        m = 10
+        module = dm.deformationmodules.Translations(self.dim, m, 1.)
+        gd_module = torch.rand(m, self.dim).view(-1)
+        mom_module = torch.rand(m, self.dim).view(-1)
+
+        result = self.compound.apply_adjoint(self.gd, module, gd_module, mom_module)
+
+        self.assertIsInstance(result, torch.Tensor)
+        self.assertEqual(result.shape, self.gd.shape)
+
 
     def test_gradcheck_call(self):
         points = torch.rand(2, self.dim, requires_grad=True)
