@@ -86,3 +86,31 @@ def sample_from_points(points, frame_res):
 
     return img_out
 
+def deformed_intensities(deformed_points, intensities):
+    """
+    Sample an image from a tensor of points.
+    Taken and adapted from https://gitlab.icm-institute.org/aramislab/deformetrica/blob/master/src/core/observations/deformable_objects/image.py
+    """
+
+    u, v = deformed_points[:, 0], deformed_points[:, 1]
+
+    u1 = torch.floor(u).long()
+    v1 = torch.floor(v).long()
+
+    u1 = torch.clamp(u1, 0, int(intensities.shape[0]) - 1)
+    v1 = torch.clamp(v1, 0, int(intensities.shape[1]) - 1)
+    u2 = torch.clamp(u1 + 1, 0, int(intensities.shape[0]) - 1)
+    v2 = torch.clamp(v1 + 1, 0, int(intensities.shape[1]) - 1)
+
+    fu = u - u1.type(torch.get_default_dtype())
+    fv = v - v1.type(torch.get_default_dtype())
+    gu = (u1 + 1).type(torch.get_default_dtype()) - u
+    gv = (v1 + 1).type(torch.get_default_dtype()) - v
+
+    deformed_intensities = (intensities[u1, v1] * gu * gv +
+                            intensities[u1, v2] * gu * fv +
+                            intensities[u2, v1] * fu * gv +
+                            intensities[u2, v2] * fu * fv).view(intensities.shape)
+
+    return deformed_intensities
+
