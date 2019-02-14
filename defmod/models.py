@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 
 from .deformationmodules import SilentPoints, Translations, Compound
 from .hamiltonian import Hamiltonian
-from .shooting import shoot
+from .shooting import shoot 
 from .usefulfunctions import AABB
 from .kernels import distances, scal
 from .sampling import sample_from_greyscale, sample_from_points
@@ -128,24 +128,24 @@ class ModelTranslationModuleRegistration(Model):
         """Returns the variables from the problem (GDs and MOMs) as lists."""
         return [self.init_points.view(-1), self.translation_gd], [self.silent_mom, self.translation_mom]
 
-    def shoot_tensor(self, it=10):
+    def shoot_tensor(self):
         """Solves the shooting equations and returns the result as tensors."""
         gd, mom = self.get_var_tensor()
-        return shoot(gd, mom, self.H, it)
+        return shoot(gd, mom, self.H)
 
-    def shoot_list(self, it=10):
+    def shoot_list(self):
         """Solves the shooting equations and returns the result as lists."""
         gd, mom = self.get_var_tensor()
-        gd, mom = shoot(gd, mom, self.H, it)
+        gd, mom = shoot(gd, mom, self.H)
         return [gd.view(-1, self.dim)[0:self.init_points.shape[0]].view(-1), gd.view(-1, self.dim)[self.init_points.shape[0]:].view(-1)], [mom.view(-1, self.dim)[0:self.init_points.shape[0]].view(-1), mom.view(-1, self.dim)[self.init_points.shape[0]:].view(-1)]
 
     def get_module_compound(self):
         return self.compound
 
-    def __call__(self, it=10):
+    def __call__(self):
         """Returns the projected data by the deformation modules."""
         gd_in, mom_in = self.get_var_tensor()
-        gd_out, mom_out = shoot(gd_in, mom_in, self.H, it)
+        gd_out, mom_out = shoot(gd_in, mom_in, self.H)
         return gd_out[0:self.init_points.shape[0]*self.dim].view(-1, self.dim), self.alpha
     
 
@@ -191,14 +191,14 @@ class ModelCompoundRegistration(Model):
             
         return [self.init_points.view(-1), *self.gd_fixed, *self.gd_params], [self.mom_silent, *mom_fixed, *self.mom_params]
 
-    def shoot_tensor(self, it=10):
+    def shoot_tensor(self):
         gd_in, mom_in = self.get_var_tensor()
-        return shoot(gd_in, mom_in, self.H, it)
+        return shoot(gd_in, mom_in, self.H)
 
     def shoot_list(self, it=10):
         """Solves the shooting equations and returns the result as lists."""
         gd, mom = self.get_var_tensor()
-        gd, mom = shoot(gd, mom, self.H, it)
+        gd, mom = shoot(gd, mom, self.H)
         gd_list = []
         mom_list = []
         for i in range(self.compound.nb_module):
@@ -209,9 +209,9 @@ class ModelCompoundRegistration(Model):
     def get_module_compound(self):
         return self.compound
 
-    def __call__(self, it = 10):
+    def __call__(self):
         gd_in, mom_in = self.get_var_tensor()
-        gd_out, mom_out = shoot(gd_in, mom_in, self.H, it)
+        gd_out, mom_out = shoot(gd_in, mom_in, self.H)
         return gd_out.view(-1, self.dim)[0:self.init_points.shape[0]], self.alpha
         
 

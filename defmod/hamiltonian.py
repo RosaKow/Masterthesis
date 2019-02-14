@@ -1,3 +1,5 @@
+import copy
+
 import torch
 import numpy as np
 import torch.nn as nn
@@ -10,6 +12,11 @@ class Hamiltonian(nn.Module):
         super().__init__()
         self.__def_module = def_module
         self.__init_controls = torch.zeros(def_module.dim_controls, requires_grad=True)
+
+    @classmethod
+    def from_hamiltonian(cls, class_instance):
+        def_module = copy.deepcopy(class_instance.def_module)
+        return cls(def_module)
 
     @property
     def def_module(self):

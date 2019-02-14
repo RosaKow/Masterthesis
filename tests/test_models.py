@@ -27,8 +27,8 @@ class TestModelTranslationModuleRegistration2D(unittest.TestCase):
         self.assertIsInstance(out[1], torch.Tensor)
         
         # Since there is no training, the output should be equal to the input.
-        self.assertTrue(torch.all(torch.eq(out[0], self.source[0])))
-        self.assertTrue(torch.all(torch.eq(out[1], self.source[1])))
+        self.assertTrue(torch.allclose(out[0], self.source[0]))
+        self.assertTrue(torch.allclose(out[1], self.source[1]))
 
     def test_fidelity(self):
         model = dm.models.ModelTranslationModuleRegistration(2, self.source, self.sigma,
@@ -60,7 +60,7 @@ class TestModelTranslationModuleRegistration2D(unittest.TestCase):
         model = dm.models.ModelTranslationModuleRegistration(2, self.source, self.sigma,
                                                              self.translation_gd, True)
         gd0, mom0 = model.get_var_tensor()
-        gd0_out, mom0_out = model.shoot_tensor(it=5)
+        gd0_out, mom0_out = model.shoot_tensor()
         self.assertEqual(gd0_out.shape, gd0.shape)
         self.assertEqual(mom0_out.shape, mom0.shape)
 
@@ -69,7 +69,7 @@ class TestModelTranslationModuleRegistration2D(unittest.TestCase):
                                                              self.translation_gd, True)
         
         gd1, mom1 = model.get_var_list()
-        gd1_out, mom1_out = model.shoot_list(it=5)
+        gd1_out, mom1_out = model.shoot_list()
         self.assertEqual(gd1_out[0].shape, gd1[0].shape)
         self.assertEqual(gd1_out[1].shape, gd1[1].shape)
         self.assertEqual(mom1_out[0].shape, mom1[0].shape)
@@ -105,8 +105,8 @@ class TestModelCompoundRegistration2D(unittest.TestCase):
         self.assertIsInstance(out[1], torch.Tensor)
         
         # Since there is no training, the output should be equal to the input.
-        self.assertTrue(torch.all(torch.eq(out[0], self.source[0])))
-        self.assertTrue(torch.all(torch.eq(out[1], self.source[1])))
+        self.assertTrue(torch.allclose(out[0], self.source[0]))
+        self.assertTrue(torch.allclose(out[1], self.source[1]))
 
     def test_fidelity(self):
         model = dm.models.ModelCompoundRegistration(2, self.source,
@@ -148,7 +148,7 @@ class TestModelCompoundRegistration2D(unittest.TestCase):
                                                     [self.translation_gd0, self.translation_gd1],
                                                     [True, False])
         gd0, mom0 = model.get_var_tensor()
-        gd0_out, mom0_out = model.shoot_tensor(it=5)
+        gd0_out, mom0_out = model.shoot_tensor()
         self.assertEqual(gd0_out.shape, gd0.shape)
         self.assertEqual(mom0_out.shape, mom0.shape)
 
@@ -158,7 +158,7 @@ class TestModelCompoundRegistration2D(unittest.TestCase):
                                                     [self.translation_gd0, self.translation_gd1],
                                                     [True, False])
         gd1, mom1 = model.get_var_list()
-        gd1_out, mom1_out = model.shoot_list(it=5)
+        gd1_out, mom1_out = model.shoot_list()
         self.assertEqual(gd1_out[0].shape, gd1[0].shape)
         self.assertEqual(gd1_out[1].shape, gd1[1].shape)
         self.assertEqual(gd1_out[2].shape, gd1[2].shape)

@@ -53,12 +53,22 @@ class TestTranslations2D(unittest.TestCase):
         self.assertEqual(self.gd.shape, result.shape)
 
     def test_cot_to_vs(self):
-        points = torch.rand(10, self.dim, requires_grad=True)
+        points = torch.rand(10, self.dim)
 
         result = self.trans.cot_to_vs(self.gd, self.mom, 1., points)
 
         self.assertIsInstance(result, torch.Tensor)
         self.assertEqual(result.shape, points.shape)
+
+        # Test against a verified, naive, implementation
+        result_naive = torch.zeros_like(points)
+        K = dm.kernels.K_xy(self.gd.view(-1, self.dim), points, 1.)
+
+        for j in range(0, points.shape[0]):
+            for i in range(0, self.nb_pts):
+                result_naive[j, :] += K[i, j]*self.mom.view(-1, self.dim)[i, :]
+
+        self.assertTrue(torch.allclose(result, result_naive))
 
     def test_apply_adjoint(self):
         m = 8

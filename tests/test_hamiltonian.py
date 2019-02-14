@@ -12,9 +12,9 @@ class TestHamiltonian(unittest.TestCase):
         self.sigma = 0.5
         self.trans = dm.deformationmodules.Translations(2, self.nb_pts, self.sigma)
 
-        self.gd = torch.rand(self.nb_pts, 2)
-        self.mom = torch.rand_like(self.gd)
-        self.controls = torch.rand_like(self.gd)
+        self.gd = 100.*torch.rand(self.nb_pts, 2)
+        self.mom = 100.*torch.rand_like(self.gd)
+        self.controls = 100.*torch.rand_like(self.gd)
 
         self.h = dm.hamiltonian.Hamiltonian(self.trans)
 

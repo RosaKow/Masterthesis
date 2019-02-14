@@ -11,11 +11,11 @@ class AABB:
         self.__ymin = ymin
         self.__ymax = ymax
 
-    @staticmethod
-    def build_from_points(points):
+    @classmethod
+    def build_from_points(cls, points):
         """Compute the AABB from points"""
 
-        return AABB(torch.min(points[:, 0]), torch.max(points[:, 0]),
+        return cls(torch.min(points[:, 0]), torch.max(points[:, 0]),
                     torch.min(points[:, 1]), torch.max(points[:, 1]))
 
     def __getitem__(self, key):
