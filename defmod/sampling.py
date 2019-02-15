@@ -3,6 +3,8 @@ import torch
 import matplotlib.image
 import matplotlib.pyplot as plt
 
+from .kernels import K_xy
+from .usefulfunctions import AABB, grid2vec
 
 def load_greyscale_image(filename):
     """Load grescale image from disk as an array of normalised float values."""
@@ -22,10 +24,10 @@ def sample_from_greyscale(image, threshold, centered=False, normalise_weights=Fa
 
     total_weight = torch.sum(points)
     count = 0
-    
+
     width_weight = 1.
     height_weight = 1.
-    
+
     if(normalise_position):
         width_weight = 1./image.shape[0]
         height_weight = 1./image.shape[1]
@@ -58,33 +60,12 @@ def load_and_sample_greyscale(filename, threshold=0., centered=False, normalise_
 
 
 def sample_from_points(points, frame_res):
-    """
-    Sample an image from a tensor of points.
-    Taken and adapted from https://gitlab.icm-institute.org/aramislab/deformetrica/blob/master/src/core/observations/deformable_objects/image.py
-    """
-    
-    u, v = points[0][:, 0], points[0][:, 1]
+    frame = torch.zeros(frame_res[0]*frame_res[1])
+    frame.scatter_add_(0, torch.clamp((points[0][:, 1]*frame_res[1] + points[0][:, 0]).long(),
+                                      0, frame_res[0]*frame_res[1]-1), points[1])
 
-    u1 = torch.floor(u).long()
-    v1 = torch.floor(v).long()
+    return frame.view(frame_res)
 
-    u1 = torch.clamp(u1, 0, frame_res[0] - 1)
-    v1 = torch.clamp(v1, 0, frame_res[1] - 1)
-    u2 = torch.clamp(u1 + 1, 0, frame_res[0] - 1)
-    v2 = torch.clamp(v1 + 1, 0, frame_res[1] - 1)
-
-    fu = u - u1.type(torch.get_default_dtype())
-    fv = v - v1.type(torch.get_default_dtype())
-    gu = (u1 + 1).type(torch.get_default_dtype()) - u
-    gv = (v1 + 1).type(torch.get_default_dtype()) - v
-
-    intensities = points[1].view(frame_res)
-    img_out = (intensities[u1, v1] * gu * gv +
-               intensities[u1, v2] * gu * fv +
-               intensities[u2, v1] * fu * gv +
-               intensities[u2, v2] * fu * fv).view(frame_res)
-
-    return img_out
 
 def deformed_intensities(deformed_points, intensities):
     """
@@ -113,4 +94,27 @@ def deformed_intensities(deformed_points, intensities):
                             intensities[u2, v2] * fu * fv).view(intensities.shape)
 
     return deformed_intensities
+
+
+def kernel_smoother(pos, points, kernel_matrix=K_xy, sigma=1.):
+    K = kernel_matrix(pos, points[0], sigma=sigma)
+
+    return torch.mm(K, points[1].view(-1, 1)).flatten().contiguous()
+
+
+def sample_from_smoothed_points(points, frame_res, kernel=K_xy, sigma=0.1,
+                                normalize=True, aabb=None):
+    """Sample an image from a list of smoothened points."""
+    if(aabb is None):
+        aabb = AABB.build_from_points(points[0])
+
+    x, y = torch.meshgrid([torch.linspace(aabb.xmin-sigma, aabb.xmax+sigma, frame_res[0]),
+                           torch.linspace(aabb.ymin-sigma, aabb.ymax+sigma, frame_res[1])])
+
+    pos = grid2vec(x, y)
+    pixels = kernel_smoother(pos, points, sigma=sigma)
+    if(normalize):
+        pixels = pixels/torch.sum(pixels)
+
+    return pixels.view(frame_res[0], frame_res[1]).contiguous()
 

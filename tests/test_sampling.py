@@ -1,6 +1,7 @@
 import unittest
 
 import torch
+import numpy as np
 
 import defmod as dm
 
@@ -56,20 +57,57 @@ class TestSampling(unittest.TestCase):
                                                     0.2, normalise_weights=True)
         self.assertTrue(torch.allclose(torch.sum(points[1]), torch.tensor(1.)))
 
-    # def test_sample_from_points_2d(self):
-    #     dim = 2
-    #     square_size = 32
-    #     m = square_size**2
-    #     points = float(square_size)*torch.rand(m, dim)
-    #     alpha = torch.rand(m)
-    #     frame_res = torch.Size([square_size, square_size])
+    def test_sample_from_points_2d(self):
+        dim = 2
+        square_size = 32
+        m = 100
+        points = float(square_size)*torch.rand(m, dim)
+        alpha = torch.rand(m)
+        frame_res = torch.Size([square_size, square_size])
 
-    #     frame_out = dm.sampling.sample_from_points((points, alpha), frame_res)
+        frame_out = dm.sampling.sample_from_points((points, alpha), frame_res)
 
-    #     self.assertIsInstance(frame_out, torch.Tensor)
-    #     self.assertEqual(frame_out.shape, frame_res)
-    #     print(torch.sum(alpha))
-    #     print(torch.sum(frame_out))
-    #     print(dm.usefulfunctions.AABB.build_from_points(points).get_list())
-    #     self.assertTrue(torch.allclose(torch.sum(frame_out), torch.sum(alpha)))
+        self.assertIsInstance(frame_out, torch.Tensor)
+        self.assertEqual(frame_out.shape, frame_res)
+        self.assertTrue(torch.allclose(torch.sum(frame_out), torch.sum(alpha)))
+
+    def test_kernel_smoother(self):
+        # We compare a fast implementation of the kernel smoother with a naive,
+        # tested implementation
+        dim = 2
+        m = 100
+        sigma = 1.
+        square_size = 32
+        frame_res = torch.Size([square_size, square_size])
+        points = square_size*torch.rand(m, dim), torch.rand(m)
+
+        x, y = torch.meshgrid([torch.arange(0., square_size, step=1.),
+                               torch.arange(0., square_size, step=1.)])
+
+        pos = dm.usefulfunctions.grid2vec(x, y)
+
+        def kernel(x, sigma):
+            return np.exp(-x**2/sigma**2)
+
+        naive = torch.zeros(pos.shape[0])
+        for i in range(0, pos.shape[0]):
+            naive[i] = np.sum(kernel(np.linalg.norm((pos[i,:].expand_as(points[0]) - points[0]).numpy(), axis=1), sigma)*points[1].numpy())
+
+        implementation = dm.sampling.kernel_smoother(pos, points, sigma=sigma)
+
+        self.assertIsInstance(implementation, torch.Tensor)
+        self.assertTrue(torch.allclose(naive, implementation))
+
+    def test_sample_from_smoothed_points_2d(self):
+        dim = 2
+        m = 100
+        sigma = 1.
+        square_size = 32
+        frame_res = torch.Size([square_size, square_size])
+        points = square_size*torch.rand(m, dim), torch.rand(m)
+
+        frame = dm.sampling.sample_from_smoothed_points(points, frame_res, sigma=sigma)
+
+        self.assertIsInstance(frame, torch.Tensor)
+        self.assertTrue(frame.shape, frame_res)
 
