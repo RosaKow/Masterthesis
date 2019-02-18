@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 
-from .kernels import gauss_kernel, K_xx, K_xy
+from .kernels import K_xx, K_xy
 
 
 class DeformationModule(torch.nn.Module):
@@ -31,7 +31,6 @@ class Translations(DeformationModule):
         self.__nb_pts = nb_pts
         self.__dim_gd = dim*nb_pts
         self.__dim_controls = dim*nb_pts
-        self.__K = gauss_kernel(self.__sigma)
 
     @property
     def sigma(self):
