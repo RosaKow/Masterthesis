@@ -72,6 +72,7 @@ def vec2grid(vec, nx, ny):
     return vec.t()[0].view(nx, ny), vec.t()[1].view(nx, ny)
 
 
+# TODO: PEP8ize the function name at the next cleanup
 def plotTensorScatter(x, alpha=1., scale=64.):
     """Scatter plot points in the format: ([x, y], scale) or ([x, y]) (in that case you can specify scale)"""
     if(isinstance(x, tuple) or isinstance(x, list)):
@@ -79,3 +80,10 @@ def plotTensorScatter(x, alpha=1., scale=64.):
         plt.scatter(x[0].detach().numpy()[:,1], x[0].detach().numpy()[:,0], s=64.*x[1].shape[0]*x[1], marker='o', alpha=alpha)
     else:
         plt.scatter(x.detach().numpy()[:,1], x.detach().numpy()[:,0], s=scale, marker='o', alpha=alpha)
+
+def plot_grid(ax, gridx, gridy, **kwargs):
+    for i in range(gridx.shape[0]):
+        ax.plot(gridx[i,:], gridy[i,:], **kwargs)
+    for i in range(gridx.shape[1]):
+        ax.plot(gridx[:,i], gridy[:,i], **kwargs)
+

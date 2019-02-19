@@ -72,7 +72,7 @@ def sample_image_from_points(points, frame_res):
 
 def deformed_intensities(deformed_points, intensities):
     """
-    Sample an image from a tensor of points.
+    Sample an image from a tensor of deformed points.
     Taken and adapted from https://gitlab.icm-institute.org/aramislab/deformetrica/blob/master/src/core/observations/deformable_objects/image.py
     """
 
