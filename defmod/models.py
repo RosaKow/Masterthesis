@@ -11,7 +11,7 @@ from .hamiltonian import Hamiltonian
 from .shooting import shoot 
 from .usefulfunctions import AABB
 from .kernels import distances, scal
-from .sampling import sample_from_greyscale, sample_from_points
+from .sampling import sample_from_greyscale, sample_from_smoothed_points
 
 
 def fidelity(a, b):
@@ -215,15 +215,23 @@ class ModelCompoundRegistration(Model):
         return gd_out.view(-1, self.dim)[0:self.init_points.shape[0]], self.alpha
         
 
+import matplotlib.pyplot as plt
+    
 class ModelCompoundImageRegistration(ModelCompoundRegistration):
     def __init__(self, dim, source_image, module_list, gd_list, fixed, threshold=0.5):
         source = sample_from_greyscale(source_image, threshold, centered=False, normalise_weights=False, normalise_position=False)
-        sampled = sample_from_points(source, source_image.shape)
+        sampled = sample_from_smoothed_points(source, source_image.shape, sigma=2., normalize=2.)
         self.frame_res = source_image.shape
         super().__init__(dim, source, module_list, gd_list, fixed)
 
     def fidelity(self, target):
-        sampled_image = sample_from_points(self(), self.frame_res)
-        target = torch.flip(target, dims=[0])
+        sampled_image = sample_from_smoothed_points(self(), self.frame_res, sigma=1., normalize=False, aabb=AABB(0., self.frame_res[0], 0., self.frame_res[1]))
+        target = sample_from_smoothed_points(sample_from_greyscale(target, threshold=0.5, centered=False, normalise_weights=False, normalise_position=False), self.frame_res, sigma=1., normalize=False, aabb=AABB(0., self.frame_res[0], 0., self.frame_res[1]))
+        # plt.subplot(1, 2, 1)
+        # plt.imshow(sampled_image.detach())
+        # plt.subplot(1, 2, 2)
+        # plt.imshow(target)
+        # plt.show()
+        #target = torch.flip(target, dims=[0])
         return L2_norm_fidelity(sampled_image, target)
 

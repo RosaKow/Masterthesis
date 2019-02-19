@@ -32,6 +32,35 @@ class TestUsefulFunctions(unittest.TestCase):
         self.assertEqual(aabb[2], aabb.ymin)
         self.assertEqual(aabb[3], aabb.ymax)
 
+    def test_aabb_is_inside(self):
+        points = torch.tensor([[1., 0.],   # Inside
+                               [2., 1.],   # Not inside
+                               [0.5, 0.5], # Inside
+                               [-1., 0.5], # Not inside
+                               [0.5, -1]]) # Not inside
+
+        aabb = dm.usefulfunctions.AABB(0., 1., 0., 1.)
+        
+        is_inside = aabb.is_inside(points)
+
+        self.assertIsInstance(is_inside, torch.Tensor)
+        self.assertEqual(is_inside.shape[0], points.shape[0])
+        self.assertTrue(is_inside[0])
+        self.assertFalse(is_inside[1])
+        self.assertTrue(is_inside[2])
+        self.assertFalse(is_inside[3])
+        self.assertFalse(is_inside[4])
+
+    def test_aabb_sample_random_point(self):
+        points = torch.randn(4, 2)
+        aabb = dm.usefulfunctions.AABB.build_from_points(points)
+
+        sampled = aabb.sample_random_point(100)
+
+        self.assertIsInstance(sampled, torch.Tensor)
+        self.assertTrue(sampled.shape, torch.Size([100, 2]))
+        self.assertTrue(torch.all(aabb.is_inside(sampled)))
+
     def test_gridandvec(self):
         m = 10
         n = 8

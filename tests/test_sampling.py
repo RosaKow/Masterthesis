@@ -65,7 +65,7 @@ class TestSampling(unittest.TestCase):
         alpha = torch.rand(m)
         frame_res = torch.Size([square_size, square_size])
 
-        frame_out = dm.sampling.sample_from_points((points, alpha), frame_res)
+        frame_out = dm.sampling.sample_image_from_points((points, alpha), frame_res)
 
         self.assertIsInstance(frame_out, torch.Tensor)
         self.assertEqual(frame_out.shape, frame_res)
@@ -91,7 +91,7 @@ class TestSampling(unittest.TestCase):
 
         naive = torch.zeros(pos.shape[0])
         for i in range(0, pos.shape[0]):
-            naive[i] = np.sum(kernel(np.linalg.norm((pos[i,:].expand_as(points[0]) - points[0]).numpy(), axis=1), sigma)*points[1].numpy())
+            naive[i] = float(np.sum(kernel(np.linalg.norm((pos[i,:].expand_as(points[0]) - points[0]).numpy(), axis=1), sigma)*points[1].numpy()))
 
         implementation = dm.sampling.kernel_smoother(pos, points, sigma=sigma)
 
@@ -110,4 +110,50 @@ class TestSampling(unittest.TestCase):
 
         self.assertIsInstance(frame, torch.Tensor)
         self.assertTrue(frame.shape, frame_res)
+
+    def test_fill_area_uniform(self):
+        # Defines a square [0, 1]x[0, 1]
+        def area(pos):
+            return torch.where((pos[:, 0] >= 0.) & (pos[:, 0] <= 1.) &
+                               (pos[:, 1] >= 0.) & (pos[:, 1] <= 1.),
+                               torch.tensor([1.]), torch.tensor([0.])).byte()
+
+        def area_circle(pos):
+            return torch.where((torch.sqrt(pos[:, 0]**2 + pos[:, 1]**2) <= 0.5),
+                               torch.tensor([1.]), torch.tensor([0.])).byte()
+
+        # AABB made bigger on purpose in order to test the rejection
+        aabb = dm.usefulfunctions.AABB(-1., 2., -1., 2.)
+
+        filled = dm.sampling.fill_area_uniform(area, aabb, 0.2)
+        
+        self.assertIsInstance(filled, torch.Tensor)
+        self.assertEqual(filled.shape[0], 36)
+        self.assertTrue(torch.all(area(filled)))
+
+        filled_circle = dm.sampling.fill_area_uniform(area_circle, aabb, 0.2)
+        self.assertTrue(torch.all(area_circle(filled_circle)))
+
+    def test_fill_area_random(self):
+        # Defines a square [0, 1]x[0, 1]
+        def area(pos):
+            return torch.where((pos[:, 0] >= -0.5) & (pos[:, 0] <= 1.) &
+                               (pos[:, 1] >= 0.) & (pos[:, 1] <= 1.),
+                               torch.tensor([1.]), torch.tensor([0.])).byte()
+
+        def area_circle(pos):
+            return torch.where((torch.sqrt(pos[:, 0]**2 + pos[:, 1]**2) <= 0.5),
+                               torch.tensor([1.]), torch.tensor([0.])).byte()
+        
+        # AABB made bigger on purpose in order to test the rejection
+        aabb = dm.usefulfunctions.AABB(-1., 2., -1., 2.)
+
+        filled = dm.sampling.fill_area_random(area, aabb, 100)
+
+        self.assertIsInstance(filled, torch.Tensor)
+        self.assertTrue(torch.all(area(filled)))
+
+        filled_circle = dm.sampling.fill_area_random(area_circle, aabb, 100)
+
+        self.assertTrue(torch.all(area_circle(filled_circle)))
 

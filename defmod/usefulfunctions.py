@@ -18,6 +18,14 @@ class AABB:
         return cls(torch.min(points[:, 0]), torch.max(points[:, 0]),
                     torch.min(points[:, 1]), torch.max(points[:, 1]))
 
+    def sample_random_point(self, count):
+        return torch.tensor([self.width, self.height])*torch.rand(count, 2)+torch.tensor([self.xmin, self.ymin])
+
+    def is_inside(self, points):
+        return torch.where((points[:, 0] >= self.__xmin) & (points[:, 0] <= self.xmax) &
+                           (points[:, 1] >= self.__ymin) & (points[:, 1] <= self.ymax),
+                           torch.tensor([1.]), torch.tensor([0.])).byte()
+
     def __getitem__(self, key):
         return self.get_list()[key]
 
@@ -48,6 +56,10 @@ class AABB:
     @property
     def height(self):
         return self.__ymax - self.__ymin
+
+    @property
+    def area(self):
+        return (self.__xmax - self.__xmin)*(self.ymax - self.ymin)
 
 
 def grid2vec(x, y):
