@@ -27,7 +27,7 @@ def K_xy(x, y, sigma = .1):
     return (-sqdistances(x, y)/sigma**2).exp()
 
 
-def gauss_kernel(sigma):
+def gauss_kernel(sigma, dtype=torch.float32):
     p = torch.tensor([1/sigma/sigma])
     def K(x, y, b):
         d = 2
@@ -36,7 +36,12 @@ def gauss_kernel(sigma):
                      'y = Vy('+str(d)+')',
                      'b = Vy('+str(d)+')',
                      'p = Pm(1)']
-        my_routine = Genred(formula, variables, reduction_op='Sum', axis=1)
+
+        cuda_type = "float32"
+        if(dtype is torch.float64):
+            cuda_type = "float64"
+
+        my_routine = Genred(formula, variables, reduction_op='Sum', axis=1, cuda_type=cuda_type)
         return my_routine(x, y, b, p, backend="auto")
     return K
 

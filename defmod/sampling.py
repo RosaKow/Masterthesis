@@ -10,9 +10,9 @@ def load_greyscale_image(filename):
     """Load grescale image from disk as an array of normalised float values."""
     image = matplotlib.image.imread(filename)
     if(image.ndim == 2):
-        return torch.tensor(1. - image)
+        return torch.tensor(1. - image, dtype=torch.get_default_dtype())
     elif(image.ndim ==3):
-        return torch.tensor(1. - image[:,:,0])
+        return torch.tensor(1. - image[:,:,0], dtype=torch.get_default_dtype())
     else:
         raise NotImplementedError
 
@@ -67,7 +67,7 @@ def sample_image_from_points(points, frame_res):
     frame.scatter_add_(0, torch.clamp((points[0][:, 1]*frame_res[1] + points[0][:, 0]).long(),
                                       0, frame_res[0]*frame_res[1]-1), points[1])
 
-    return frame.view(frame_res)
+    return frame.view(frame_res).contiguous()
 
 
 def deformed_intensities(deformed_points, intensities):
@@ -107,7 +107,7 @@ def kernel_smoother(pos, points, kernel_matrix=K_xy, sigma=1.):
 
 
 def sample_from_smoothed_points(points, frame_res, kernel=K_xy, sigma=1.,
-                                normalize=True, aabb=None):
+                                normalize=False, aabb=None):
     """Sample an image from a list of smoothened points."""
     if(aabb is None):
         aabb = AABB.build_from_points(points[0].detach())
@@ -118,9 +118,19 @@ def sample_from_smoothed_points(points, frame_res, kernel=K_xy, sigma=1.,
     pos = grid2vec(x, y)
     pixels = kernel_smoother(pos, points, sigma=sigma)
     if(normalize):
-        pixels = pixels/torch.sum(pixels)
+        pixels = pixels/torch.max(pixels)
 
     return pixels.view(frame_res[0], frame_res[1]).contiguous()
+
+
+def resample_image_to_smoothed(image, kernel=K_xy, sigma=1., normalize=False):
+    x, y = torch.meshgrid([torch.arange(0., image.shape[0], step=1.),
+                           torch.arange(0., image.shape[1], step=1.)])
+
+    pixel_pos = grid2vec(x, y)
+
+    return sample_from_smoothed_points((pixel_pos, image.view(-1)), image.shape, kernel=kernel,
+                                       sigma=sigma, normalize=normalize)
 
 
 def fill_area_uniform(area, aabb, spacing):

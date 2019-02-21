@@ -148,7 +148,7 @@ class TestSampling(unittest.TestCase):
         # AABB made bigger on purpose in order to test the rejection
         aabb = dm.usefulfunctions.AABB(-1., 2., -1., 2.)
 
-        filled = dm.sampling.fill_area_random(area, aabb, 100)
+        filled = dm.sampling.fill_area_random(area, aabb, 20)
 
         self.assertIsInstance(filled, torch.Tensor)
         self.assertTrue(torch.all(area(filled)))

@@ -22,6 +22,7 @@ def shoot(gd, mom, h):
     assert len(mom.shape) == 1
     
     # Wrapper class used by TorchDiffEqb
+    # TODO: __call__ of hamiltonian should give the hamiltonian value and not his grad wrt gd, mom.
     class TorchDiffEqHamiltonian(Hamiltonian):
         def __init__(self, def_module):
             super().__init__(def_module)

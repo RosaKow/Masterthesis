@@ -9,9 +9,9 @@ import matplotlib.pyplot as plt
 from .deformationmodules import SilentPoints, Translations, Compound
 from .hamiltonian import Hamiltonian
 from .shooting import shoot 
-from .usefulfunctions import AABB
+from .usefulfunctions import AABB, grid2vec
 from .kernels import distances, scal
-from .sampling import sample_from_greyscale, sample_from_smoothed_points, deformed_intensities
+from .sampling import sample_from_greyscale, sample_from_smoothed_points, resample_image_to_smoothed
 
 
 def fidelity(a, b):
@@ -53,7 +53,10 @@ class Model(nn.Module):
 
     def fidelity(self, target):
         raise NotImplementedError
-    
+
+    def transform_target(self, target):
+        return target
+
     def cost(self, target):
         gd, mom = self.get_var_tensor()
         attach = self.fidelity(target)
@@ -61,6 +64,8 @@ class Model(nn.Module):
         return attach, deformation_cost
 
     def fit(self, target, lr=1e-3, l=1., max_iter=100, tol=1e-7, log_interval=10):
+        transformed_target = self.transform_target(target.clone())
+
         optimizer = torch.optim.SGD(self.parameters(), lr=lr, momentum=0.05)
         self.nit = -1
         self.break_loop = False
@@ -69,7 +74,7 @@ class Model(nn.Module):
         def closure():
             self.nit += 1
             optimizer.zero_grad()
-            attach, deformation_cost = self.cost(target)
+            attach, deformation_cost = self.cost(transformed_target)
             attach = l*attach
             cost = attach + deformation_cost
 
@@ -220,20 +225,18 @@ import matplotlib.pyplot as plt
 class ModelCompoundImageRegistration(ModelCompoundRegistration):
     def __init__(self, dim, source_image, module_list, gd_list, fixed):
         source = sample_from_greyscale(source_image, 0., centered=False, normalise_weights=False, normalise_position=False)
-        #self.sampled = sample_from_smoothed_points(source, source_image.shape, sigma=2., normalize=2.)
         self.frame_res = source_image.shape
         super().__init__(dim, source, module_list, gd_list, fixed)
 
+    def transform_target(self, target):
+        return resample_image_to_smoothed(target, sigma=1., normalize=True)
+
     def fidelity(self, target):
-        #sampled_image = sample_from_smoothed_points(self(), self.frame_res, sigma=1., normalize=False, aabb=AABB(0., self.frame_res[0], 0., self.frame_res[1]))
-        image_points = self()
-        sampled_image = torch.flip(deformed_intensities(image_points[0], image_points[1].view(self.frame_res)), dims=[0])
-        #target = sample_from_smoothed_points(sample_from_greyscale(target, threshold=0.5, centered=False, normalise_weights=False, normalise_position=False), self.frame_res, sigma=1., normalize=False, aabb=AABB(0., self.frame_res[0], 0., self.frame_res[1]))
-        # plt.subplot(1, 2, 1)
-        # plt.imshow(sampled_image.detach())
-        # plt.subplot(1, 2, 2)
-        # plt.imshow(target)
-        # plt.show()
-        #target = torch.flip(target, dims=[0])
+        sampled_image = torch.flip(sample_from_smoothed_points(self(), self.frame_res, sigma=1., normalize=True), dims=[0])
+        plt.subplot(1, 2, 1)
+        plt.imshow(sampled_image.detach().numpy())
+        plt.subplot(1, 2, 2)
+        plt.imshow(target.detach().numpy())
+        plt.show()
         return L2_norm_fidelity(sampled_image, target)
 
