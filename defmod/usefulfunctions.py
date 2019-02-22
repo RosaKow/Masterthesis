@@ -64,16 +64,15 @@ class AABB:
 
 def grid2vec(x, y):
     """Convert a grid of points (such as given by torch.meshgrid) to a tensor of vectors."""
-    return torch.cat([x.contiguous().view(1, -1), y.contiguous().view(1, -1)], 0).t()
+    return torch.cat([x.contiguous().view(1, -1), y.contiguous().view(1, -1)], 0).t().contiguous()
 
 
 def vec2grid(vec, nx, ny):
     """Convert a tensor of vectors to a grid of points."""
-    return vec.t()[0].view(nx, ny), vec.t()[1].view(nx, ny)
+    return vec.t()[0].view(nx, ny).contiguous(), vec.t()[1].view(nx, ny).contiguous()
 
 
-# TODO: PEP8ize the function name at the next cleanup
-def plotTensorScatter(x, alpha=1., scale=64.):
+def plot_tensor_scatter(x, alpha=1., scale=64.):
     """Scatter plot points in the format: ([x, y], scale) or ([x, y]) (in that case you can specify scale)"""
     if(isinstance(x, tuple) or isinstance(x, list)):
         #plt.scatter(x[0].detach().numpy()[:,1], x[0].detach().numpy()[:,0], s=50.*x[1].shape[0]*x[1].detach().numpy(), marker='o', alpha=alpha)

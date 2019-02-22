@@ -106,6 +106,7 @@ def kernel_smoother(pos, points, kernel_matrix=K_xy, sigma=1.):
     return torch.mm(K, points[1].view(-1, 1)).flatten().contiguous()
 
 
+# TODO: this function is flipping images in the vertical axis, find out why
 def sample_from_smoothed_points(points, frame_res, kernel=K_xy, sigma=1.,
                                 normalize=False, aabb=None):
     """Sample an image from a list of smoothened points."""
