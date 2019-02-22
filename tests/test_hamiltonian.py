@@ -12,15 +12,13 @@ class TestHamiltonian(unittest.TestCase):
         self.sigma = 0.5
         self.trans = dm.deformationmodules.Translations(2, self.nb_pts, self.sigma)
 
-        self.gd = torch.rand(self.nb_pts, 2)
-        self.mom = torch.rand_like(self.gd)
-        self.controls = torch.rand_like(self.gd)
+        self.gd = 100.*torch.rand(self.nb_pts, 2)
+        self.mom = 100.*torch.rand_like(self.gd)
+        self.controls = 100.*torch.rand_like(self.gd)
 
         self.h = dm.hamiltonian.Hamiltonian(self.trans)
 
-    def test_good_init(self):        
-        self.assertEqual(torch.all(torch.eq(self.h.init_controls,
-                                            torch.zeros(self.trans.dim_controls))), True)
+    def test_good_init(self):
         self.assertIsInstance(self.h.def_module, dm.deformationmodules.DeformationModule)
 
     def test_apply_mom(self):
@@ -49,5 +47,5 @@ class TestHamiltonian(unittest.TestCase):
         self.gd.requires_grad_()
         self.mom.requires_grad_()
         self.assertTrue(torch.autograd.gradcheck(self.h.geodesic_controls, (self.gd, self.mom),
-                                                 raise_exception=False))
+                                                raise_exception=False))
 

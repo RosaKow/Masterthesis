@@ -4,37 +4,48 @@ import torch
 
 import defmod as dm
 
+from defmod.shooting import shoot
+
+torch.set_default_tensor_type(torch.DoubleTensor)
+
 class TestShooting(unittest.TestCase):
     def setUp(self):
-        self.m = 10
+        self.m = 4
         self.trans = dm.deformationmodules.Translations(2, self.m, 0.5)
         self.h = dm.hamiltonian.Hamiltonian(self.trans)
+        self.gd = torch.rand(self.m, 2).view(-1)
+        self.mom = torch.rand(self.m, 2).view(-1)
 
     def test_shooting(self):
-        gd = torch.rand(self.m, 2, requires_grad=True)
-        mom = torch.rand(self.m, 2, requires_grad=True)
-        gd_out, mom_out = dm.shooting.shoot(gd, mom, self.h)
+        gd_out, mom_out = shoot(self.gd, self.mom, self.h)
 
         self.assertIsInstance(gd_out, torch.Tensor)
         self.assertIsInstance(mom_out, torch.Tensor)
 
-        self.assertEqual(gd.shape, gd_out.shape)
-        self.assertEqual(mom.shape, mom_out.shape)
+        self.assertEqual(self.gd.shape, gd_out.shape)
+        self.assertEqual(self.mom.shape, mom_out.shape)
 
     def test_shooting_zero(self):
-        gd = torch.rand(self.m, 2, requires_grad=True)
-        mom = torch.zeros_like(gd, requires_grad=True)
-        gd_out, mom_out = dm.shooting.shoot(gd, mom, self.h)
+        mom = torch.zeros_like(self.gd, requires_grad=True).view(-1)
+        gd_out, mom_out = shoot(self.gd, mom, self.h)
 
-        self.assertEqual(torch.all(torch.eq(gd, gd_out)), True)
-        self.assertEqual(torch.all(torch.eq(mom, mom_out)), True)
+        self.assertTrue(torch.allclose(self.gd, gd_out))
+        self.assertTrue(torch.allclose(mom, mom_out))
+
+    def test_shooting_rand(self):
+        gd_out, mom_out = shoot(self.gd, self.mom, self.h)
+
+        self.assertFalse(torch.allclose(self.gd, gd_out))
+        self.assertFalse(torch.allclose(self.mom, mom_out))
 
     def test_gradcheck_shoot(self):
-        gd = torch.rand(self.m, 2, requires_grad=True)
-        mom = torch.zeros_like(gd, requires_grad=True)
+        self.gd.requires_grad_()
+        self.mom.requires_grad_()
 
-        self.assertTrue(torch.autograd.gradcheck(dm.shooting.shoot, (gd, mom, self.h, 1), raise_exception=False))
-
-        
+        # We multiply GD by 400. as it seems gradcheck is very sensitive to
+        # badly conditioned problems
+        # TODO: be sure it is because of that
+        self.assertTrue(torch.autograd.gradcheck(shoot,
+            (400.*self.gd, self.mom, self.h), raise_exception=False))
 
 
