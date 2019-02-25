@@ -17,7 +17,7 @@ from torchdiffeq import odeint_adjoint as odeint
 #     return gd_out, mom_out
 
 
-def shoot(gd, mom, h, reverse=False):
+def shoot(gd, mom, h, it=2, reverse=False, intermediate=False, output_list=False):
     assert len(gd.shape) == 1
     assert len(mom.shape) == 1
     
@@ -47,8 +47,19 @@ def shoot(gd, mom, h, reverse=False):
 
     x = torch.cat([gd.view(1, -1), mom.view(1, -1)], dim=0)
     result = odeint(TorchDiffEqHamiltonian.from_hamiltonian(h),
-                            x, torch.linspace(t0, t1, 2), method='rk4')
-    return result[-1, 0, :], result[-1, 1, :]
+                            x, torch.linspace(t0, t1, it), method='rk4')
+    if(intermediate):
+        result_gd_list = []
+        result_mom_list = []
+        for i in range(0, it):
+            result_gd_list.append(result[i, 0, :])
+            result_mom_list.append(result[i, 1, :])
 
+        return result_gd_list, result_mom_list
+    else:
+        if(output_list):
+            return [result[-1, 0, :]], [result[-1, 1, :]]
+        else:
+            return result[-1, 0, :], result[-1, 1, :]
 
 

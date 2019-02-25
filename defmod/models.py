@@ -104,7 +104,7 @@ class Model(nn.Module):
 
 
 class ModelCompound(Model):
-    def __init__(self, dim, module_list, gd_list, fixed):
+    def __init__(self, dim, module_list, gd_list, fixed_gd):
         super(Model, self).__init__()
         self.dim = dim
 
@@ -113,12 +113,13 @@ class ModelCompound(Model):
         self.module_list = []
 
         for i in range(len(module_list)):
-            if(fixed[i]):
+            if(fixed_gd[i]):
                 self.gd_fixed.append(gd_list[i].clone().requires_grad_())
+                self.mom_params.append(torch.nn.Parameter(torch.zeros_like(gd_list[i])))
                 self.module_list.append(module_list[i])
 
         for i in range(len(module_list)):
-            if(not fixed[i]):
+            if(not fixed_gd[i]):
                 self.gd_params.append(torch.nn.Parameter(gd_list[i].clone()))
                 self.mom_params.append(torch.nn.Parameter(torch.zeros_like(gd_list[i])))
                 self.module_list.append(module_list[i])
@@ -126,33 +127,56 @@ class ModelCompound(Model):
         self.compound = Compound(self.module_list)
 
     def get_var_tensor(self):
-        gd_list = [*self.gd_fixed, *self.gd_params]
-        mom_list = [torch.zeros(sum(a.shape[0] for a in self.gd_fixed)), *self.mom_params]
-        return torch.cat(gd_list), torch.cat(mom_list)
+        # gd_list = [*self.gd_fixed, *self.gd_params]
+        # mom_list = [torch.zeros(sum(a.shape[0] for a in self.gd_fixed)), *self.mom_params]
+        # return torch.cat(gd_list), torch.cat(mom_list)
+
+        return torch.cat([*self.gd_fixed, *self.gd_params]), torch.cat([*self.mom_params])
 
     def get_var_list(self):
-        mom_fixed = []
-        for fixed in self.gd_fixed:
-            mom_fixed.append(torch.zeros_like(fixed))
+        # mom_fixed = []
+        # for fixed in self.gd_fixed:
+        #     mom_fixed.append(torch.zeros_like(fixed))
 
-        return [*self.gd_fixed, *self.gd_params], [*mom_fixed, *self.mom_params]
+        # return [*self.gd_fixed, *self.gd_params], [*mom_fixed, *self.mom_params]
+        return [*self.gd_fixed, *self.gd_params], self.mom_params
 
-    def shoot_tensor(self):
+    def shoot_tensor(self, it=2, intermediate=False):
         gd_in, mom_in = self.get_var_tensor()
-        return shoot(gd_in, mom_in, Hamiltonian(self.compound))
 
-    def shoot_list(self):
+        gd_out, mom_out = shoot(gd_in, mom_in, Hamiltonian(self.compound), it=it, intermediate=intermediate, output_list=True)
+        if(intermediate):
+            return gd_out, mom_out
+        else:
+            return [gd_out[-1]], [mom_out[-1]]
+
+
+    def shoot_list(self, it=2, intermediate=False):
         """Solves the shooting equations and returns the result as lists."""
-        gd, mom = self.get_var_tensor()
-        gd, mom = shoot(gd, mom, Hamiltonian(self.compound))
-        gd_list = []
-        mom_list = []
-        for i in range(self.compound.nb_module):
-            gd_list.append(gd[self.compound.indice_gd[i]:self.compound.indice_gd[i+1]])
-            mom_list.append(mom[self.compound.indice_gd[i]:self.compound.indice_gd[i+1]])
-        return gd_list, mom_list
+        gd_in, mom_in = self.get_var_tensor()
+        gd, mom = shoot(gd_in, mom_in, Hamiltonian(self.compound), it=it, intermediate=intermediate, output_list=True)
+        
+        gd_out = []
+        mom_out = []
 
-    def compute_deformation_grid(self, grid_origin, grid_size, grid_resolution):
+        its = [-1]
+        if(intermediate):
+            its = range(it)
+
+        for i in its:
+            gd_list = []
+            mom_list = []
+            for j in range(self.compound.nb_module):
+                gd_list.append(gd[i][self.compound.indice_gd[j]:self.compound.indice_gd[j+1]])
+                mom_list.append(mom[i][self.compound.indice_gd[j]:self.compound.indice_gd[j+1]])
+
+            gd_out.append(gd_list)
+            mom_out.append(mom_list)
+
+        return gd_out, mom_out
+
+
+    def compute_deformation_grid(self, grid_origin, grid_size, grid_resolution, it=2, intermediate=False):
         x, y = torch.meshgrid([
             torch.linspace(grid_origin[0], grid_origin[0]+grid_size[0], grid_resolution[0]),
             torch.linspace(grid_origin[1], grid_origin[1]+grid_size[1], grid_resolution[1])])
@@ -162,47 +186,79 @@ class ModelCompound(Model):
         gd = torch.cat([gridpos.view(-1), gd_model])
         mom = torch.cat([torch.zeros_like(gridpos.view(-1)), mom_model])
         modules = Compound([SilentPoints(2, gridpos.shape[0]), *self.module_list])
-        gd_out, _ = shoot(gd, mom, Hamiltonian(modules))
+        gd_out, _ = shoot(gd, mom, Hamiltonian(modules), it=it,
+                          intermediate=intermediate, output_list=True)
 
-        return vec2grid(gd_out[0:gridpos.view(-1).shape[0]].view(-1, 2), grid_resolution[0], grid_resolution[1])
+        grid_x_out = []
+        grid_y_out = []
+        for i in range(it):
+            grid_x, grid_y = vec2grid(gd_out[i][0:gridpos.view(-1).shape[0]].view(-1, 2), grid_resolution[0], grid_resolution[1])
+            grid_x_out.append(grid_x)
+            grid_y_out.append(grid_y)
+
+        return grid_x_out, grid_y_out
 
 
 class ModelCompoundWithPointsRegistration(ModelCompound):
-    def __init__(self, dim, source, module_list, gd_list, fixed):
+    def __init__(self, dim, source, module_list, gd_list, fixed_gd):
         self.alpha = source[1]
         module_list.insert(0, SilentPoints(dim, source[0].shape[0]))
         gd_list.insert(0, source[0].view(-1))
         fixed.insert(0, True)
-        super().__init__(dim, module_list, gd_list, fixed)
+        super().__init__(dim, module_list, gd_list, fixed_gd)
 
-    def fidelity(self, target):
-        return fidelity(self(), target)
+    def fidelity(self, target, it=2):
+        points = self(it=it)
+        return fidelity((points[0][-1], points[1][-1]), target)
 
-    def __call__(self):
-        gd_list, _ = self.shoot_list()
-        return gd_list[0].view(-1, 2), self.alpha
+    def __call__(self, it=2, intermediate=False):
+        gd_list, _ = self.shoot_list(it=it, intermediate=intermediate)
+        return [gd[0].view(-1, 2) for gd in gd_list], [self.alpha]
 
 
 class ModelCompoundImageRegistration(ModelCompound):
-    def __init__(self, dim, source_image, module_list, gd_list, fixed):
+    def __init__(self, dim, source_image, module_list, gd_list, fixed_gd):
         self.frame_res = source_image.shape
         self.source = sample_from_greyscale(source_image, 0., centered=False, normalise_weights=False, normalise_position=False)
-        super().__init__(dim, module_list, gd_list, fixed)
+        super().__init__(dim, module_list, gd_list, fixed_gd)
 
     def transform_target(self, target):
         return target
 
     def fidelity(self, target):
-        return L2_norm_fidelity(self(), target)
+        out = self(it=5)[-1]
 
-    def __call__(self):
-        module_gd, module_mom = self.get_var_tensor()
+        out_gd, _ = self.shoot_list(it=5)
+        
+        # import matplotlib.pyplot as plt
+        # plt.subplot(1, 2, 1)
+        # plt.imshow(out.detach().numpy())
+        # plt.plot(out_gd[-1][0].view(-1, 2)[:, 1].detach().numpy(), out_gd[-1][0].view(-1, 2)[:, 0].detach().numpy(), '.')
+        # plt.subplot(1, 2, 2)
+        # plt.imshow(target)
+        # plt.show()
+
+        # print(torch.max(out), torch.min(out))
+        
+        return L2_norm_fidelity(out, target)
+
+    def __call__(self, it=2, intermediate=False):
+        # First, forward step shooting only the deformation modules
+        phi_gd, phi_mom = self.shoot_tensor(it=it)
+
+        # Then, reverse shooting in order to get the final deformed image
         silent_gd = self.source[0].view(-1)
         silent_mom = torch.zeros_like(silent_gd)
-        gd, mom = torch.cat([silent_gd, module_gd]), torch.cat([silent_mom, module_mom])
+        gd, mom = torch.cat([silent_gd, phi_gd[-1]]), torch.cat([silent_mom, phi_mom[-1]])
+        
         compound = Compound([SilentPoints(2, self.source[0].shape[0]), *self.module_list])
-        gd_out, mom_out = shoot(gd, mom, Hamiltonian(compound), reverse=True)
+        
+        gd_out, mom_out = shoot(gd, mom, Hamiltonian(compound), it=it, reverse=True, intermediate=intermediate, output_list=True)
 
-        return torch.flip(deformed_intensities(gd_out[compound.indice_gd[0]:compound.indice_gd[1]].view(-1, 2), self.source[1].view(self.frame_res)), dims=[0])
+        its = [-1]
+        if(intermediate):
+            its = range(it)
+
+        return [torch.flip(deformed_intensities(gd_out[i][compound.indice_gd[0]:compound.indice_gd[1]].view(-1, 2), self.source[1].view(self.frame_res)), dims=[0]) for i in its]
 
 

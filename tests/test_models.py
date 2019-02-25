@@ -41,16 +41,20 @@ class TestModelCompound(unittest.TestCase):
     def test_shoot_tensor(self):
         gd0, mom0 = self.model.get_var_tensor()
         gd0_out, mom0_out = self.model.shoot_tensor()
-        self.assertEqual(gd0_out.shape, gd0.shape)
-        self.assertEqual(mom0_out.shape, mom0.shape)
+        self.assertEqual(gd0_out[-1].shape, gd0.shape)
+        self.assertEqual(mom0_out[-1].shape, mom0.shape)
 
     def test_shoot_list(self):
         gd1, mom1 = self.model.get_var_list()
         gd1_out, mom1_out = self.model.shoot_list()
-        self.assertEqual(gd1_out[0].shape, gd1[0].shape)
-        self.assertEqual(gd1_out[1].shape, gd1[1].shape)
-        self.assertEqual(mom1_out[0].shape, mom1[0].shape)
-        self.assertEqual(mom1_out[1].shape, mom1[1].shape)
+        self.assertEqual(gd1_out[-1][0].shape, gd1[0].shape)
+        self.assertEqual(gd1_out[-1][1].shape, gd1[1].shape)
+        self.assertEqual(mom1_out[-1][0].shape, mom1[0].shape)
+        self.assertEqual(mom1_out[-1][1].shape, mom1[1].shape)
+
+    def test_compute_deformation_grid(self):
+        pass
+
 
 class TestModelCompoundWithPointsRegistration(unittest.TestCase):
     def setUp(self):
@@ -100,14 +104,14 @@ class TestModelCompoundWithPointsRegistration(unittest.TestCase):
     def test_shoot_tensor(self):
         gd0, mom0 = self.model.get_var_tensor()
         gd0_out, mom0_out = self.model.shoot_tensor()
-        self.assertEqual(gd0_out.shape, gd0.shape)
-        self.assertEqual(mom0_out.shape, mom0.shape)
+        self.assertEqual(gd0_out[-1].shape, gd0.shape)
+        self.assertEqual(mom0_out[-1].shape, mom0.shape)
 
     def test_shoot_list(self):
         gd1, mom1 = self.model.get_var_list()
         gd1_out, mom1_out = self.model.shoot_list()
-        self.assertEqual(gd1_out[0].shape, gd1[0].shape)
-        self.assertEqual(gd1_out[1].shape, gd1[1].shape)
-        self.assertEqual(mom1_out[0].shape, mom1[0].shape)
-        self.assertEqual(mom1_out[1].shape, mom1[1].shape)
+        self.assertEqual(gd1_out[-1][0].shape, gd1[0].shape)
+        self.assertEqual(gd1_out[-1][1].shape, gd1[1].shape)
+        self.assertEqual(mom1_out[-1][0].shape, mom1[0].shape)
+        self.assertEqual(mom1_out[-1][1].shape, mom1[1].shape)
 

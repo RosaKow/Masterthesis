@@ -25,6 +25,37 @@ class TestShooting(unittest.TestCase):
         self.assertEqual(self.gd.shape, gd_out.shape)
         self.assertEqual(self.mom.shape, mom_out.shape)
 
+        gd_out, mom_out = shoot(self.gd, self.mom, self.h, reverse=True)
+        self.assertIsInstance(gd_out, torch.Tensor)
+        self.assertIsInstance(mom_out, torch.Tensor)
+
+        self.assertEqual(self.gd.shape, gd_out.shape)
+        self.assertEqual(self.mom.shape, mom_out.shape)
+
+    def test_shooting_list(self):
+        gd_out, mom_out = shoot(self.gd, self.mom, self.h, output_list=True)
+        self.assertIsInstance(gd_out, list)
+        self.assertIsInstance(mom_out, list)
+
+        self.assertEqual(len(gd_out), 1)
+        self.assertEqual(len(mom_out), 1)
+
+        self.assertEqual(self.gd.shape, gd_out[0].shape)
+        self.assertEqual(self.mom.shape, mom_out[0].shape)
+
+    def test_shooting_list_intermediate(self):
+        inter = 10
+        gd_out, mom_out = shoot(self.gd, self.mom, self.h, it=inter, intermediate=True)
+        self.assertIsInstance(gd_out, list)
+        self.assertIsInstance(mom_out, list)
+
+        self.assertEqual(len(gd_out), inter)
+        self.assertEqual(len(mom_out), inter)
+
+        for i in range(inter):
+            self.assertEqual(self.gd.shape, gd_out[i].shape)
+            self.assertEqual(self.mom.shape, mom_out[i].shape)
+
     def test_shooting_zero(self):
         mom = torch.zeros_like(self.gd, requires_grad=True).view(-1)
         gd_out, mom_out = shoot(self.gd, mom, self.h)
