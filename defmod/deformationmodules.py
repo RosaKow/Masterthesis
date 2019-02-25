@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 
-from .kernels import K_xx, K_xy
+from .kernels import K_xx, K_xy, gauss_kernel
 
 
 class DeformationModule(torch.nn.Module):
