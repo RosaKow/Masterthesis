@@ -4,14 +4,15 @@ from torch.autograd import grad
 from .hamiltonian import Hamiltonian
 from torchdiffeq import odeint_adjoint as odeint
 
-# def shoot(gd, mom, h, n=10):
+
+# def shoot(gd_out, mom_out, h, it=1):
 #     # TODO: Assertion on the dimension of gd and mom (should be 1D)
-#     step = 1. / n
-#     gd_out = gd.clone()
-#     mom_out = mom.clone()
-#     for i in range(n):
+#     step = 1. / it
+#     # gd_out = gd.clone()
+#     # mom_out = mom.clone()
+#     for i in range(it):
 #         controls = h.geodesic_controls(gd_out, mom_out)
-#         [d_gd, d_mom] = grad(h(gd_out, mom_out, controls), [gd_out, mom_out], create_graph=True)
+#         d_gd, d_mom = grad(h(gd_out, mom_out, controls.detach()), [gd_out, mom_out], create_graph=True)
 #         gd_out = gd_out + step*d_mom
 #         mom_out = mom_out - step*d_gd
 #     return gd_out, mom_out
@@ -39,15 +40,9 @@ def shoot(gd, mom, h, it=2, reverse=False, intermediate=False, output_list=False
 
                 return torch.cat([g[1], -g[0]], dim=0).view(2, -1)
 
-    t0, t1 = 0., 0.
-    if(not reverse):
-        t1 = 1.
-    else:
-        t0 = 1.
-
     x = torch.cat([gd.view(1, -1), mom.view(1, -1)], dim=0)
     result = odeint(TorchDiffEqHamiltonian.from_hamiltonian(h),
-                            x, torch.linspace(t0, t1, it), method='rk4')
+                            x, torch.linspace(0., 1., it), method='rk4')
     if(intermediate):
         result_gd_list = []
         result_mom_list = []

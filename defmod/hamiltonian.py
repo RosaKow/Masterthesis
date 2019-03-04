@@ -31,13 +31,13 @@ class Hamiltonian(nn.Module):
         speed = self.__def_module.action(gd, self.__def_module, gd, controls)
         return scal(mom, speed)
 
-    def geodesic_controls(self, gd, mom):
-        init_controls = torch.zeros(self.__def_module.dim_controls, requires_grad=True)
-        controls = grad(self.apply_mom(gd, mom, init_controls),
-                        [init_controls], create_graph=True)[0]
-        return self.__def_module.compute_geodesic_control(controls, gd)
-
     # def geodesic_controls(self, gd, mom):
-    #    return self.__def_module.compute_geodesic_control(
-    #        self.__def_module.apply_adjoint(gd, self.__def_module, gd, mom), gd)
+    #     init_controls = torch.zeros(self.__def_module.dim_controls, requires_grad=True)
+    #     controls = grad(self.apply_mom(gd, mom, init_controls),
+    #                     [init_controls], create_graph=True)[0]
+    #     return self.__def_module.compute_geodesic_control(controls, gd)
+
+    def geodesic_controls(self, gd, mom):
+       return self.__def_module.compute_geodesic_control(
+           self.__def_module.apply_adjoint(gd, self.__def_module, gd, mom), gd)
 

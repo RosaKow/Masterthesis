@@ -76,3 +76,13 @@ class TestUsefulFunctions(unittest.TestCase):
         self.assertTrue(torch.all(torch.eq(u, u_out)))
         self.assertTrue(torch.all(torch.eq(v, v_out)))
 
+    def test_indices2coords(self):
+        m, n = 8, 4
+        u, v = torch.meshgrid(torch.tensor(range(0, m)), torch.tensor(range(0, n)))
+        indices = dm.usefulfunctions.grid2vec(u, v)
+
+        coords = dm.usefulfunctions.indices2coords(indices, torch.Size([m, n]))
+
+        self.assertIsInstance(coords, torch.Tensor)
+        self.assertEqual(coords.shape, indices.shape)
+

@@ -77,6 +77,6 @@ class TestShooting(unittest.TestCase):
         # badly conditioned problems
         # TODO: be sure it is because of that
         self.assertTrue(torch.autograd.gradcheck(shoot,
-            (400.*self.gd, self.mom, self.h), raise_exception=False))
+            (400.*self.gd, self.mom, self.h), raise_exception=True))
 
 
