@@ -8,36 +8,39 @@ from torch.autograd import grad
 from .kernels import scal
 
 class Hamiltonian(nn.Module):
-    def __init__(self, def_module):
+    def __init__(self, module):
         super().__init__()
-        self.__def_module = def_module
+        self.__module = module
 
     @classmethod
     def from_hamiltonian(cls, class_instance):
-        def_module = copy.deepcopy(class_instance.def_module)
-        return cls(def_module)
+        module = copy.deepcopy(class_instance.module)
+        return cls(module)
 
     @property
-    def def_module(self):
-        return self.__def_module
+    def module(self):
+        return self.__module
 
-    def __call__(self, gd, mom, controls):
+    def __call__(self):
         """Computes the hamiltonian."""
-        def_cost = self.__def_module.cost(gd, controls)
-        return self.apply_mom(gd, mom, controls) - def_cost
-
-    def apply_mom(self, gd, mom, controls):
+        # def_cost = self.module.cost(gd, controls)
+        # return self.apply_mom(gd, mom, controls) - def_cost
+        return self.apply_mom() - self.__module.cost()
+        
+    def apply_mom(self):
         """Apply the moment on the geodesic descriptors."""
-        speed = self.__def_module.action(gd, self.__def_module, gd, controls)
-        return scal(mom, speed)
+        # speed = self.module.action(gd, self.module, gd, controls)
+        # return scal(mom, speed)
+        speed = self.module.action(self.module)
+        return scal(self.module.manifold.mom, speed)
+
+    def geodesic_controls(self):
+        # Fill initial zero controls
+        self.module.fill_controls(torch.zeros(self.module.dim_controls, requires_grad=True))
+        controls = grad(self.apply_mom(), [init_controls], create_graph=True)[0]
+        self.module.compute_geodesic_control(controls)
 
     # def geodesic_controls(self, gd, mom):
-    #     init_controls = torch.zeros(self.__def_module.dim_controls, requires_grad=True)
-    #     controls = grad(self.apply_mom(gd, mom, init_controls),
-    #                     [init_controls], create_graph=True)[0]
-    #     return self.__def_module.compute_geodesic_control(controls, gd)
-
-    def geodesic_controls(self, gd, mom):
-       return self.__def_module.compute_geodesic_control(
-           self.__def_module.apply_adjoint(gd, self.__def_module, gd, mom), gd)
+    #    return self.module.compute_geodesic_control(
+    #        self.module.apply_adjoint(gd, self.module, gd, mom), gd)
 
