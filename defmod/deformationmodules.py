@@ -1,14 +1,19 @@
+import copy
+
 import torch
 import numpy as np
 
 from .kernels import gauss_kernel, K_xx, K_xy
 from .manifold import Landmarks, CompoundManifold
-
+from .usefulfunctions import make_grad_graph
 
 class DeformationModule(torch.nn.Module):
     """Abstract module."""
     def __init__(self):
         super().__init__()
+
+    def copy(self):
+        return copy.copy(self)
 
     def __call__(self, gd, controls, points):
         """Applies the generated vector field on given points."""
@@ -27,11 +32,9 @@ class Translations(DeformationModule):
     """Module generating sum of translations."""
     def __init__(self, manifold, sigma):
         super().__init__()
-        self.__sigma = sigma
-        self.__dim = manifold.dim
-        self.__nb_pts = manifold.nb_pts
-        self.__dim_controls = self.__dim*self.__nb_pts
         self.__manifold = manifold
+        self.__sigma = sigma
+        self.__dim_controls = self.__manifold.dim*self.__manifold.nb_pts
         self.__controls = torch.zeros(self.__dim_controls)
 
     @classmethod
@@ -39,52 +42,40 @@ class Translations(DeformationModule):
         return cls(Landmarks.build_empty(dim, nb_pts), sigma)
 
     @property
+    def manifold(self):
+        return self.__manifold
+
+    @property
     def sigma(self):
         return self.__sigma
-
-    @property
-    def dim(self):
-        return self.__dim
-
-    @property
-    def nb_pts(self):
-        return self.__nb_pts
-
-    @property
-    def dim_gd(self):
-        return self.__dim_gd
 
     @property
     def dim_controls(self):
         return self.__dim_controls
 
-    @property
-    def manifold(self):
-        return self.__manifold
-
     def __get_controls(self):
         return self.__controls
 
     def fill_controls(self, controls):
-        self.__controls = controls.clone()
+        self.__controls = controls
 
     controls = property(__get_controls, fill_controls)
 
-    def __call__(self, points) :
+    def __call__(self, points):
         """Applies the generated vector field on given points."""
-        K_q = K_xy(points, self.manifold.gd.view(-1, self.__dim), self.__sigma)
-        return torch.mm(K_q, self.controls.view(-1, self.__dim))
+        K_q = K_xy(points, self.manifold.gd.view(-1, self.__manifold.dim), self.__sigma)
+        return torch.mm(K_q, self.__controls.view(-1, self.__manifold.dim))
 
-    def cost(self) :
+    def cost(self):
         """Returns the cost."""
-        K_q = K_xx(self.manifold.gd.view(-1, self.__dim), self.__sigma)
-        m = torch.mm(K_q, self.controls.view(-1, self.__dim))
-        return 0.5*torch.dot(m.view(-1), controls.view(-1))
+        K_q = K_xx(self.manifold.gd.view(-1, self.__manifold.dim), self.__sigma)
+        m = torch.mm(K_q, self.controls.view(-1, self.__manifold.dim))
+        return 0.5*torch.dot(m.view(-1), self.__controls.view(-1))
 
     def compute_geodesic_control(self, delta):
         """Computes geodesic control from \delta \in H^\ast."""
-        K_q = K_xx(self.manifold.gd.view(-1, self.__dim), self.__sigma)
-        controls, _ = torch.gesv(delta.view(-1, self.__dim), K_q)
+        K_q = K_xx(self.manifold.gd.view(-1, self.__manifold.dim), self.__sigma)
+        controls, _ = torch.gesv(delta.view(-1, self.__manifold.dim), K_q)
         self.controls = controls.contiguous().view(-1)
 
 
@@ -92,35 +83,23 @@ class SilentPoints(DeformationModule):
     """Module handling silent points."""
     def __init__(self, manifold):
         super().__init__()
-        self.__dim = manifold.dim
-        self.__nb_pts = manifold.nb_pts
-        self.__dim_gd = self.__dim*self.__nb_pts
-        self.__dim_controls = 0
         self.__manifold = manifold        
 
     @property
-    def dim(self):
-        return self.__dim
-
-    @property
-    def nb_pts(self):
-        return self.__nb_pts
-
-    @property
-    def dim_gd(self):
-        return self.__dim_gd
-
-    @property
     def dim_controls(self):
-        return self.__dim_controls
+        return 0
 
     @property
     def manifold(self):
         return self.__manifold
 
-    @property
-    def controls(self):
+    def __get_controls(self):
         return torch.tensor([])
+
+    def fill_controls(self, controls):
+        pass
+
+    controls = property(__get_controls, fill_controls)
 
     def __call__(self, points):
         """Applies the generated vector field on given points."""
@@ -141,41 +120,42 @@ class CompoundModule(DeformationModule):
         super().__init__()
         self.__module_list = list(module_list)
         self.__nb_module = len(module_list)
-        self.__dim_gd = sum([mod.dim_gd for mod in module_list])
         self.__dim_controls = sum([mod.dim_controls for mod in module_list])
         self.__indice_controls = [0]
         self.__indice_controls.extend(np.cumsum([m.dim_controls for m in self.__module_list]))
-        self.__manifold = CompoundManifold([m.manifold for m in self.__module_list])
-
-        self.__nb_pts = sum(mod.nb_pts for mod in module_list)
 
     @property
     def module_list(self):
         return self.__module_list
+
+    def __getitem__(self, index):
+        return self.__module_list[index]
 
     @property
     def nb_module(self):
         return self.__nb_module
 
     @property
-    def dim_gd(self):
-        return self.__dim_gd
-
-    @property
     def dim_controls(self):
         return self.__dim_controls
 
-    @property
-    def nb_pts(self):
-        return self.__nb_pts
-
     def __get_controls(self):
-        pass
+        return torch.cat([m.controls for m in self.__module_list])
 
-    def fill_controls(self):
-        pass
+    def fill_controls(self, controls):
+        for i in range(self.__nb_module):
+            self.__module_list[i].fill_controls(
+                controls[self.__indice_controls[i]:self.__indice_controls[i+1]])
 
     controls = property(__get_controls, fill_controls)
+
+    @property
+    def indice_controls(self):
+        return self.__indice_controls
+
+    @property
+    def manifold(self):
+        return CompoundManifold([m.manifold for m in self.__module_list])
 
     def __call__(self, points) :
         """Applies the generated vector field on given points."""
@@ -183,7 +163,7 @@ class CompoundModule(DeformationModule):
         for m in self.__module_list:
             app_list.append(m(points))
 
-        return torch.sum(torch.cat(app_list), 0)
+        return sum(app_list).view(-1, self.manifold.dim)
 
     def cost(self):
         """Returns the cost."""
@@ -191,7 +171,7 @@ class CompoundModule(DeformationModule):
         for m in self.__module_list:
             cost_list.append(m.cost())
 
-        return torch.sum(torch.cat(cost_list), 0)
+        return sum(cost_list)
 
     def compute_geodesic_control(self, delta):
         """Computes geodesic control from \delta \in H^\ast."""

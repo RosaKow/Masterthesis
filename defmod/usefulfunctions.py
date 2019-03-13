@@ -1,6 +1,8 @@
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
+from torchviz import make_dot
+
 
 
 class AABB:
@@ -72,14 +74,14 @@ def vec2grid(vec, nx, ny):
     return vec.t()[0].view(nx, ny).contiguous(), vec.t()[1].view(nx, ny).contiguous()
 
 def indices2coords(indices, shape, pixel_size=torch.tensor([1., 1.])):
-    #return torch.tensor([pixel_size[1]*indices[:, 1], pixel_size[0]*(shape[0] - indices[:, 0] - 1)])
+    # return torch.tensor([pixel_size[1]*indices[:, 1], pixel_size[0]*(shape[0] - indices[:, 0] - 1)])
     return torch.cat([(pixel_size[0]*indices[:, 0]).view(-1, 1), (pixel_size[1]*(shape[1] - indices[:, 1] - 1)).view(-1, 1)], 1)
 
 
 def plot_tensor_scatter(x, alpha=1., scale=64.):
     """Scatter plot points in the format: ([x, y], scale) or ([x, y]) (in that case you can specify scale)"""
     if(isinstance(x, tuple) or isinstance(x, list)):
-        #plt.scatter(x[0].detach().numpy()[:,1], x[0].detach().numpy()[:,0], s=50.*x[1].shape[0]*x[1].detach().numpy(), marker='o', alpha=alpha)
+        plt.scatter(x[0].detach().numpy()[:,1], x[0].detach().numpy()[:,0], s=50.*x[1].shape[0]*x[1].detach().numpy(), marker='o', alpha=alpha)
         plt.scatter(x[0].detach().numpy()[:,1], x[0].detach().numpy()[:,0], s=64.*x[1].shape[0]*x[1], marker='o', alpha=alpha)
     else:
         plt.scatter(x.detach().numpy()[:,1], x.detach().numpy()[:,0], s=scale, marker='o', alpha=alpha)
@@ -89,4 +91,8 @@ def plot_grid(ax, gridx, gridy, **kwargs):
         ax.plot(gridx[i,:], gridy[i,:], **kwargs)
     for i in range(gridx.shape[1]):
         ax.plot(gridx[:,i], gridy[:,i], **kwargs)
+
+def make_grad_graph(tensor, filename):
+    dot = make_dot(tensor)
+    dot.render(filename)
 
