@@ -18,7 +18,7 @@ class TestHamiltonian(unittest.TestCase):
         self.trans = dm.deformationmodules.Translations(self.landmarks, self.sigma)
         self.trans.fill_controls(self.controls)
 
-        self.h = dm.hamiltonian.Hamiltonian(self.trans)
+        self.h = dm.hamiltonian.Hamiltonian([self.trans])
 
     def test_good_init(self):
         self.assertIsInstance(self.h.module, dm.deformationmodules.DeformationModule)
@@ -33,14 +33,15 @@ class TestHamiltonian(unittest.TestCase):
 
     def test_geodesic_controls(self):
         self.h.geodesic_controls()
-        self.assertIsInstance(self.h.module.controls, torch.Tensor)
-        self.assertTrue(self.h.module.controls.shape, self.controls)
+        self.assertIsInstance(self.h.module.controls, list)
+        self.assertIsInstance(self.h.module[0].controls, torch.Tensor)
+        self.assertTrue(self.h.module.controls[0].shape, self.controls)
 
     def test_gradcheck_call(self):
         def call(gd, mom, controls):
-            self.h.module.manifold.fill_gd(gd)
-            self.h.module.manifold.fill_cotan(mom)
-            self.h.module.fill_controls(controls)
+            self.h.module.manifold.fill_gd([gd])
+            self.h.module.manifold.fill_cotan([mom])
+            self.h.module.fill_controls([controls])
 
             return self.h()
 
@@ -53,9 +54,9 @@ class TestHamiltonian(unittest.TestCase):
     def test_gradcheck_apply_mom(self):
         def apply_mom(gd, mom, controls):
 
-            self.h.module.manifold.fill_gd(gd)
-            self.h.module.manifold.fill_cotan(mom)
-            self.h.module.fill_controls(controls)
+            self.h.module.manifold.fill_gd([gd])
+            self.h.module.manifold.fill_cotan([mom])
+            self.h.module.fill_controls([controls])
 
             return self.h.apply_mom()
 
@@ -67,8 +68,8 @@ class TestHamiltonian(unittest.TestCase):
 
     def test_gradcheck_geodesic_controls(self):
         def geodesic_controls(gd, mom):
-            self.h.module.manifold.fill_gd(gd)
-            self.h.module.manifold.fill_cotan(mom)
+            self.h.module.manifold.fill_gd([gd])
+            self.h.module.manifold.fill_cotan([mom])
 
             self.h.geodesic_controls()
 
@@ -77,11 +78,12 @@ class TestHamiltonian(unittest.TestCase):
         self.gd.requires_grad_()
         self.mom.requires_grad_()
 
-        self.assertTrue(torch.autograd.gradcheck(geodesic_controls, (self.gd, self.mom), raise_exception=False))
+        self.assertTrue(torch.autograd.gradcheck(geodesic_controls, (self.gd, self.mom),
+                                                 raise_exception=False))
 
 
-# This constitute more as an integration test than an unit test, but using Hamiltonian with
-# compound modules need some attentions
+# This constitutes more as an integration test than an unit test, but using Hamiltonian with
+# compound modules needs some attentions
 class TestHamiltonianCompound(unittest.TestCase):
     def setUp(self):
         self.nb_pts_trans = 10
@@ -92,19 +94,20 @@ class TestHamiltonianCompound(unittest.TestCase):
         self.mom_trans = 100.*torch.rand_like(self.gd_trans).view(-1)
         self.gd_silent = 100.*torch.rand(self.nb_pts_silent, 2).view(-1)
         self.mom_silent = 100.*torch.rand_like(self.gd_silent).view(-1)
-        self.gd = torch.cat([self.gd_trans])
-        self.mom = torch.cat([self.mom_trans])
+        self.gd = [self.gd_trans, self.gd_silent]
+        self.mom = [self.mom_trans, self.mom_silent]
         
         self.landmarks_trans = dm.manifold.Landmarks(2, self.nb_pts_trans, gd=self.gd_trans, cotan=self.mom_trans)
         self.landmarks_silent = dm.manifold.Landmarks(2, self.nb_pts_silent, gd=self.gd_silent, cotan=self.mom_silent)
-        self.controls = 100.*torch.rand_like(self.gd_trans)
+        self.controls_trans = 100.*torch.rand_like(self.gd_trans)
+        self.controls_silent = torch.tensor([])
+        self.controls = [self.controls_trans, self.controls_silent]
 
         self.trans = dm.deformationmodules.Translations(self.landmarks_trans, self.sigma)
-        self.trans.fill_controls(self.controls)
+        self.trans.fill_controls(self.controls[0])
         self.silent = dm.deformationmodules.SilentPoints(self.landmarks_silent)
-        self.compound = dm.deformationmodules.CompoundModule([self.trans])
 
-        self.h = dm.hamiltonian.Hamiltonian(self.compound)
+        self.h = dm.hamiltonian.Hamiltonian([self.trans, self.silent])
 
     def test_good_init(self):
         self.assertIsInstance(self.h.module, dm.deformationmodules.DeformationModule)
@@ -121,48 +124,59 @@ class TestHamiltonianCompound(unittest.TestCase):
         self.gd_trans.requires_grad_()
         self.mom_trans.requires_grad_()
         self.h.geodesic_controls()
-        self.assertIsInstance(self.h.module.controls, torch.Tensor)
-        self.assertTrue(self.h.module.controls.shape, self.controls)
+        self.assertIsInstance(self.h.module.controls, list)
+        self.assertIsInstance(self.h.module.controls[0], torch.Tensor)
+        self.assertIsInstance(self.h.module.controls[1], torch.Tensor)
+        self.assertTrue(self.h.module.controls[0].shape, self.controls_trans.shape)
+        self.assertTrue(self.h.module.controls[1].shape, self.controls_silent.shape)
 
     def test_gradcheck_call(self):
-        def call(gd, mom, controls):
-            self.h.module.manifold.fill_gd(gd)
-            self.h.module.manifold.fill_cotan(mom)
-            self.h.module.fill_controls(controls)
+        def call(gd_trans, gd_silent, mom_trans, mom_silent, controls_trans, controls_silent):
+            self.h.module.manifold.fill_gd([gd_trans, gd_silent])
+            self.h.module.manifold.fill_cotan([mom_trans, mom_silent])
+            self.h.module.fill_controls([controls_trans, controls_silent])
 
             return self.h()
 
-        self.gd.requires_grad_()
-        self.mom.requires_grad_()
-        self.controls.requires_grad_()
+        self.gd_trans.requires_grad_()
+        self.gd_silent.requires_grad_()
+        self.mom_trans.requires_grad_()
+        self.mom_silent.requires_grad_()
+        self.controls_trans.requires_grad_()
+        self.controls_silent.requires_grad_()
         
-        self.assertTrue(torch.autograd.gradcheck(call, (self.gd, self.mom, self.controls), raise_exception=False))
+        self.assertTrue(torch.autograd.gradcheck(call, (self.gd_trans, self.gd_silent, self.mom_trans, self.mom_silent, self.controls_trans, self.controls_silent), raise_exception=False))
 
     def test_gradcheck_apply_mom(self):
-        def apply_mom(gd, mom, controls):
-            self.h.module.manifold.fill_gd(gd)
-            self.h.module.manifold.fill_cotan(mom)
-            self.h.module.fill_controls(controls)
+        def apply_mom(gd_trans, gd_silent, mom_trans, mom_silent, controls_trans, controls_silent):
+            self.h.module.manifold.fill_gd([gd_trans, gd_silent])
+            self.h.module.manifold.fill_cotan([mom_trans, mom_silent])
+            self.h.module.fill_controls([controls_trans, controls_silent])
 
             return self.h.apply_mom()
 
-        self.gd.requires_grad_()
-        self.mom.requires_grad_()
-        self.controls.requires_grad_()
+        self.gd_trans.requires_grad_()
+        self.gd_silent.requires_grad_()
+        self.mom_trans.requires_grad_()
+        self.mom_silent.requires_grad_()
+        self.controls_trans.requires_grad_()
+        self.controls_silent.requires_grad_()
 
-        self.assertTrue(torch.autograd.gradcheck(apply_mom, (self.gd, self.mom, self.controls), raise_exception=False))
+        self.assertTrue(torch.autograd.gradcheck(apply_mom, (self.gd_trans, self.gd_silent, self.mom_trans, self.mom_silent, self.controls_trans, self.controls_silent), raise_exception=False))
 
-    # def test_gradcheck_geodesic_controls(self):
-    #     def geodesic_controls(gd, mom):
-    #         self.h.module.manifold.fill_gd(gd)
-    #         self.h.module.manifold.fill_cotan(mom)
+    def test_gradcheck_geodesic_controls(self):
+        def geodesic_controls(gd_trans, gd_silent, mom_trans, mom_silent):
+            self.h.module.manifold.fill_gd([gd_trans, gd_silent])
+            self.h.module.manifold.fill_cotan([mom_trans, mom_silent])
 
-    #         self.h.geodesic_controls()
+            self.h.geodesic_controls()
 
-    #         return self.h.module.controls
+            return self.h.module.controls
 
-    #     self.gd.requires_grad_()
-    #     self.mom.requires_grad_()
+        self.gd_trans.requires_grad_()
+        self.gd_silent.requires_grad_()
+        self.mom_trans.requires_grad_()
+        self.mom_silent.requires_grad_()
 
-    #     self.assertTrue(torch.autograd.gradcheck(geodesic_controls, (self.gd, self.mom), raise_exception=False))
+        self.assertTrue(torch.autograd.gradcheck(geodesic_controls, (self.gd_trans, self.gd_silent, self.mom_trans, self.mom_silent), raise_exception=False))
 

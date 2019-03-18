@@ -168,7 +168,7 @@ class CompoundTest2D(unittest.TestCase):
         self.dim = 2
         self.sigma = 0.5
         self.nb_pts_trans = 5
-        self.nb_pts_silent = 10
+        self.nb_pts_silent = 12
         self.nb_pts = self.nb_pts_silent + self.nb_pts_trans
         self.gd_trans = torch.rand(self.nb_pts_trans, self.dim).view(-1)
         self.mom_trans = torch.rand(self.nb_pts_trans, self.dim).view(-1)
@@ -179,13 +179,13 @@ class CompoundTest2D(unittest.TestCase):
         self.trans = dm.deformationmodules.Translations(self.landmarks_trans, self.sigma)
         self.silent = dm.deformationmodules.SilentPoints(self.landmarks_silent)
         self.compound = dm.deformationmodules.CompoundModule([self.silent, self.trans])
-        self.controls = torch.rand_like(self.gd_trans)
+        self.controls_trans = torch.rand_like(self.gd_trans)
+        self.controls = [None, self.controls_trans]
         self.compound.fill_controls(self.controls)
 
     def test_compound(self):
-        self.assertEqual(self.compound.module_list, [self.silent, self.trans])
+        self.assertEqual(self.compound.module_dict, [self.silent, self.trans])
         self.assertEqual(self.compound.dim_controls, 2*self.nb_pts_trans)
-        self.assertEqual(self.compound.indice_controls, [0, 0, 2*self.nb_pts_trans])
 
         self.assertEqual(self.compound.manifold.nb_pts, self.nb_pts)
 
@@ -198,7 +198,7 @@ class CompoundTest2D(unittest.TestCase):
         self.assertIsInstance(result, torch.Tensor)
         self.assertEqual(result.shape, points.shape)
 
-        self.compound.fill_controls(torch.zeros_like(self.controls))
+        self.compound.fill_controls([None, torch.zeros_like(self.controls_trans)])
         result = self.compound(points)
 
         self.assertEqual(torch.all(torch.eq(result, torch.zeros_like(points))), True)
@@ -210,48 +210,52 @@ class CompoundTest2D(unittest.TestCase):
         self.assertEqual(cost.shape, torch.tensor(0.).shape)
 
     def test_compute_geodesic_control(self):
-        delta = torch.rand_like(self.controls)
+        delta = [None, torch.rand_like(self.controls_trans)]
 
         self.compound.compute_geodesic_control(delta)
 
-        self.assertIsInstance(self.compound.controls, torch.Tensor)
-        self.assertEqual(self.compound.controls.shape, torch.Size([self.compound.dim_controls]))
-
+        self.assertIsInstance(self.compound.controls, list)
+        self.assertIsInstance(self.compound.controls[0], torch.Tensor)
+        self.assertIsInstance(self.compound.controls[1], torch.Tensor)
+        
     def test_gradcheck_call(self):
-        def call(gd, controls, points):
-            self.compound.fill_controls(controls)
-            self.compound.manifold.fill_gd(gd)
+        def call(gd_silent, gd_trans, controls_trans, points):
+            self.compound.fill_controls([None, controls_trans])
+            self.compound.manifold.fill_gd([gd_silent, gd_trans])
 
             return self.compound(points)
 
-        gd = torch.cat([self.gd_silent, self.gd_trans]).requires_grad_()
-        points = torch.rand(10, self.dim, requires_grad=True)
-        self.controls.requires_grad_()
+        self.gd_silent.requires_grad_()
+        self.gd_trans.requires_grad_()
+        self.controls_trans.requires_grad_()
+        points = torch.rand(100, self.dim, requires_grad=True)
 
-        self.assertTrue(torch.autograd.gradcheck(call, (gd, self.controls, points), raise_exception=False))
+        self.assertTrue(torch.autograd.gradcheck(call, (self.gd_silent, self.gd_trans, self.controls_trans, points), raise_exception=False))
 
     def test_gradcheck_cost(self):
-        def cost(gd, controls):
-            self.compound.fill_controls(controls)
-            self.compound.manifold.fill_gd(gd)
+        def cost(gd_silent, gd_trans, controls_trans):
+            self.compound.fill_controls([None, controls_trans])
+            self.compound.manifold.fill_gd([gd_silent, gd_trans])
 
             return self.compound.cost()
 
-        gd = torch.cat([self.gd_silent, self.gd_trans]).requires_grad_()
-        self.controls.requires_grad_()
+        self.gd_silent.requires_grad_()
+        self.gd_trans.requires_grad_()
+        self.controls_trans.requires_grad_()
 
-        self.assertTrue(torch.autograd.gradcheck(cost, (gd, self.controls), raise_exception=False))
+        self.assertTrue(torch.autograd.gradcheck(cost, (self.gd_silent, self.gd_trans, self.controls_trans), raise_exception=False))
 
     def test_gradcheck_compute_geodesic_control(self):
-        def compute_geodesic_control(delta, gd):
-            self.compound.manifold.gd = gd
+        def compute_geodesic_control(delta_trans, gd_silent, gd_trans):
+            self.compound.manifold.fill_gd([gd_silent, gd_trans])
+            self.compound.compute_geodesic_control([None, delta_trans])
 
-            self.compound.compute_geodesic_control(delta)
+            # TODO: why does it work only for controls[1] and not controls?
+            return self.compound.controls[1]
 
-            return self.compound.controls
+        delta_trans = torch.rand_like(self.gd_trans, requires_grad=True)
+        self.gd_silent.requires_grad_()
+        self.gd_trans.requires_grad_()
 
-        delta = torch.rand_like(self.controls, requires_grad=True)
-        gd = torch.cat([self.gd_silent, self.gd_trans]).requires_grad_()
-
-        self.assertTrue(torch.autograd.gradcheck(compute_geodesic_control, (delta, gd), raise_exception=False))
+        self.assertTrue(torch.autograd.gradcheck(compute_geodesic_control, (delta_trans, self.gd_silent, self.gd_trans), raise_exception=False))
 

@@ -1,4 +1,5 @@
 import copy
+from collections import Iterable
 
 import torch
 import numpy as np
@@ -7,16 +8,17 @@ from torch.autograd import grad
 
 from .kernels import scal
 from .usefulfunctions import make_grad_graph
+from .deformationmodules import CompoundModule
 
 class Hamiltonian(nn.Module):
-    def __init__(self, module):
+    def __init__(self, module_list):
+        assert isinstance(module_list, Iterable)
         super().__init__()
-        self.__module = module
+        self.__module = CompoundModule(module_list)
 
     @classmethod
     def from_hamiltonian(cls, class_instance):
-        module = class_instance.module
-        return cls(module)
+        return cls(class_instance.module)
 
     @property
     def module(self):
@@ -28,21 +30,10 @@ class Hamiltonian(nn.Module):
 
     def apply_mom(self):
         """Apply the moment on the geodesic descriptors."""
-        a = self.__module.manifold.inner_prod_module(self.__module)
-        make_grad_graph(a, "apply_mom")
-        return a
-
-    def apply_mom_controls(self, controls):
-        self.__module.fill_controls(controls)
-        a = self.__module.manifold.inner_prod_module(self.__module)
-        return a
+        return self.__module.manifold.inner_prod_module(self.__module)
 
     def geodesic_controls(self):
-        # Fill initial zero controls
-        #self.__module.fill_controls(torch.zeros(self.__module.dim_controls, requires_grad=True))
-        #a = self.__module.controls
-        init_controls = torch.zeros(self.__module.dim_controls, requires_grad=True)
-        a = self.apply_mom_controls(init_controls)
-        controls = grad(a, [init_controls], create_graph=True)[0]
-        self.module.compute_geodesic_control(controls)
+        self.__module.fill_controls_zero()
+        controls = grad(self.apply_mom(), self.__module.controls, create_graph=True, allow_unused=True)
+        self.module.compute_geodesic_control(list(controls))
 

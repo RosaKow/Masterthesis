@@ -61,6 +61,24 @@ class TestUsefulFunctions(unittest.TestCase):
         self.assertTrue(sampled.shape, torch.Size([100, 2]))
         self.assertTrue(torch.all(aabb.is_inside(sampled)))
 
+    def test_flatten_tensor_list(self):
+        a = torch.rand(4)
+        b = torch.rand(4)
+        c = torch.rand(4)
+        d = torch.rand(4)
+        e = torch.rand(4)
+
+        l = [a, b, [c, [d, e]]]
+
+        l_out = dm.usefulfunctions.flatten_tensor_list(l)
+
+        self.assertEqual(len(l_out), 5)
+        self.assertTrue(torch.all(torch.eq(l_out[0], a)))
+        self.assertTrue(torch.all(torch.eq(l_out[1], b)))
+        self.assertTrue(torch.all(torch.eq(l_out[2], c)))
+        self.assertTrue(torch.all(torch.eq(l_out[3], d)))
+        self.assertTrue(torch.all(torch.eq(l_out[4], e)))
+
     def test_gridandvec(self):
         m = 10
         n = 8

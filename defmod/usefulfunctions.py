@@ -1,8 +1,9 @@
+from collections import Iterable
+
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from torchviz import make_dot
-
 
 
 class AABB:
@@ -64,6 +65,17 @@ class AABB:
         return (self.__xmax - self.__xmin)*(self.ymax - self.ymin)
 
 
+def flatten_tensor_list(l, out_list=[]):
+    """Very simple, recursive, list flattening functions that stops at the torch.Tensor (without unwrapping them). Should work well for lists that are not too much nested."""
+    for el in l:
+        if isinstance(el, Iterable) and not isinstance(el, torch.Tensor):
+            flatten_tensor_list(el, out_list)
+        else:
+            out_list.append(el)
+
+    return out_list
+
+
 def grid2vec(x, y):
     """Convert a grid of points (such as given by torch.meshgrid) to a tensor of vectors."""
     return torch.cat([x.contiguous().view(1, -1), y.contiguous().view(1, -1)], 0).t().contiguous()
@@ -86,11 +98,13 @@ def plot_tensor_scatter(x, alpha=1., scale=64.):
     else:
         plt.scatter(x.detach().numpy()[:,1], x.detach().numpy()[:,0], s=scale, marker='o', alpha=alpha)
 
+
 def plot_grid(ax, gridx, gridy, **kwargs):
     for i in range(gridx.shape[0]):
         ax.plot(gridx[i,:], gridy[i,:], **kwargs)
     for i in range(gridx.shape[1]):
         ax.plot(gridx[:,i], gridy[:,i], **kwargs)
+
 
 def make_grad_graph(tensor, filename):
     dot = make_dot(tensor)

@@ -4,7 +4,7 @@ import torch
 import numpy as np
 
 
-class Manifold():
+class Manifold:
     def __init__(self):
         super().__init__()
 
@@ -116,8 +116,6 @@ class CompoundManifold(Manifold):
         self.__dim = self.__manifold_list[0].dim
         self.__nb_pts = sum([m.nb_pts for m in self.__manifold_list])
         self.__dim_gd = sum([m.dim_gd for m in self.__manifold_list])
-        self.__indice_gd = [0]
-        self.__indice_gd.extend(np.cumsum([m.dim_gd for m in self.__manifold_list]))
 
     @property
     def manifold_list(self):
@@ -142,18 +140,14 @@ class CompoundManifold(Manifold):
     def dim_gd(self):
         return self.__dim_gd
 
-    def my_grad(self, grad):
-        return torch.cat([m.gd.grad for m in self.__manifold_list])
-
     def __get_gd(self):
-        cat = torch.cat([m.gd for m in self.__manifold_list])
-        return cat
+        return [m.gd for m in self.__manifold_list]
 
     def __get_tan(self):
-        return torch.cat([m.tan for m in self.__manifold_list])
+        return [m.tan for m in self.__manifold_list]
 
     def __get_cotan(self):
-        return torch.cat([m.cotan for m in self.__manifold_list])
+        return [m.cotan for m in self.__manifold_list]
 
     def fill(self, manifold):
         self.fill_gd(manifold.gd)
@@ -161,19 +155,19 @@ class CompoundManifold(Manifold):
         self.fill_cotan(manifold.cotan)
 
     def fill_gd(self, gd):
-        assert gd.shape[0] == self.__dim_gd
+        assert len(gd) == self.nb_manifold
         for i in range(len(self.__manifold_list)):
-            self.__manifold_list[i].fill_gd(gd[self.__indice_gd[i]:self.__indice_gd[i+1]])
+            self.__manifold_list[i].fill_gd(gd[i])
 
     def fill_tan(self, tan):
-        assert tan.shape[0] == self.__dim_gd
+        assert len(tan) == self.nb_manifold
         for i in range(len(self.__manifold_list)):
-            self.__manifold_list[i].fill_tan(tan[self.__indice_gd[i]:self.__indice_gd[i+1]])
+            self.__manifold_list[i].fill_tan(tan[i])
 
     def fill_cotan(self, cotan):
-        assert cotan.shape[0] == self.__dim_gd
+        assert len(cotan) == self.nb_manifold
         for i in range(len(self.__manifold_list)):
-            self.__manifold_list[i].fill_cotan(cotan[self.__indice_gd[i]:self.__indice_gd[i+1]])
+            self.__manifold_list[i].fill_cotan(cotan[i])
 
     gd = property(__get_gd, fill_gd)
     tan = property(__get_tan, fill_tan)
@@ -181,15 +175,15 @@ class CompoundManifold(Manifold):
 
     def muladd_gd(self, gd, scale):
         for i in range(len(self.__manifold_list)):
-            self.__manifold_list[i].muladd_gd(gd[self.__indice_gd[i]:self.__indice_gd[i+1]], scale)
+            self.__manifold_list[i].muladd_gd(gd[i], scale)
 
     def muladd_tan(self, tan, scale):
         for i in range(len(self.__manifold_list)):
-            self.__manifold_list[i].muladd_tan(tan[self.__indice_gd[i]:self.__indice_gd[i+1]], scale)
+            self.__manifold_list[i].muladd_tan(tan[i], scale)
 
     def muladd_cotan(self, cotan, scale):
         for i in range(len(self.__manifold_list)):
-            self.__manifold_list[i].muladd_cotan(cotan[self.__indice_gd[i]:self.__indice_gd[i+1]], scale)
+            self.__manifold_list[i].muladd_cotan(cotan[i], scale)
 
     def inner_prod_module(self, module):
         return sum([m.inner_prod_module(module) for m in self.__manifold_list])

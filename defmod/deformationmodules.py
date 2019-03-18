@@ -1,4 +1,5 @@
 import copy
+from collections import Iterable
 
 import torch
 import numpy as np
@@ -7,7 +8,7 @@ from .kernels import gauss_kernel, K_xx, K_xy
 from .manifold import Landmarks, CompoundManifold
 from .usefulfunctions import make_grad_graph
 
-class DeformationModule(torch.nn.Module):
+class DeformationModule:
     """Abstract module."""
     def __init__(self):
         super().__init__()
@@ -31,15 +32,17 @@ class DeformationModule(torch.nn.Module):
 class Translations(DeformationModule):
     """Module generating sum of translations."""
     def __init__(self, manifold, sigma):
+        assert isinstance(manifold, Landmarks)
         super().__init__()
         self.__manifold = manifold
         self.__sigma = sigma
         self.__dim_controls = self.__manifold.dim*self.__manifold.nb_pts
-        self.__controls = torch.zeros(self.__dim_controls)
+        self.__controls = torch.zeros(self.__dim_controls, requires_grad=True)
 
     @classmethod
-    def build_empty(cls, dim, nb_pts, sigma):
-        return cls(Landmarks.build_empty(dim, nb_pts), sigma)
+    def build_and_fill(cls, dim, nb_pts, sigma, gd=None, tan=None, cotan=None):
+        """Builds the Translations deformation module from tensors."""
+        return cls(Landmarks(dim, nb_pts, gd=gd, tan=tan, cotan=cotan), sigma)
 
     @property
     def manifold(self):
@@ -60,6 +63,9 @@ class Translations(DeformationModule):
         self.__controls = controls
 
     controls = property(__get_controls, fill_controls)
+
+    def fill_controls_zero(self):
+        self.__controls = torch.zeros(self.__dim_controls, requires_grad=True)
 
     def __call__(self, points):
         """Applies the generated vector field on given points."""
@@ -94,12 +100,15 @@ class SilentPoints(DeformationModule):
         return self.__manifold
 
     def __get_controls(self):
-        return torch.tensor([])
+        return torch.tensor([], requires_grad=True)
 
     def fill_controls(self, controls):
         pass
 
     controls = property(__get_controls, fill_controls)
+
+    def fill_controls_zero(self):
+        pass
 
     def __call__(self, points):
         """Applies the generated vector field on given points."""
@@ -114,15 +123,12 @@ class SilentPoints(DeformationModule):
         pass
 
 
-class CompoundModule(DeformationModule):
+class CompoundModule(DeformationModule, Iterable):
     """Combination of modules."""
     def __init__(self, module_list):
+        assert isinstance(module_list, Iterable)
         super().__init__()
-        self.__module_list = list(module_list)
-        self.__nb_module = len(module_list)
-        self.__dim_controls = sum([mod.dim_controls for mod in module_list])
-        self.__indice_controls = [0]
-        self.__indice_controls.extend(np.cumsum([m.dim_controls for m in self.__module_list]))
+        self.__module_list = [*module_list]
 
     @property
     def module_list(self):
@@ -131,27 +137,38 @@ class CompoundModule(DeformationModule):
     def __getitem__(self, index):
         return self.__module_list[index]
 
+    def __iter__(self):
+        self.current = 0
+        return self
+
+    def __next__(self):
+        if self.current >= len(self.__module_list):
+            raise StopIteration
+        else:
+            self.current = self.current + 1
+            return self.__module_list[self.current - 1]
+
     @property
     def nb_module(self):
-        return self.__nb_module
+        return len(self.__module_list)
 
     @property
     def dim_controls(self):
-        return self.__dim_controls
+        return sum([mod.dim_controls for mod in self.__module_list])
 
     def __get_controls(self):
-        return torch.cat([m.controls for m in self.__module_list])
+        return [m.controls for m in self.__module_list]
 
     def fill_controls(self, controls):
-        for i in range(self.__nb_module):
-            self.__module_list[i].fill_controls(
-                controls[self.__indice_controls[i]:self.__indice_controls[i+1]])
+        assert len(controls) == self.nb_module
+        for i in range(self.nb_module):
+            self.__module_list[i].fill_controls(controls[i])
 
     controls = property(__get_controls, fill_controls)
 
-    @property
-    def indice_controls(self):
-        return self.__indice_controls
+    def fill_controls_zero(self):
+        for m in self.__module_list:
+            m.fill_controls_zero()
 
     @property
     def manifold(self):
@@ -175,6 +192,6 @@ class CompoundModule(DeformationModule):
 
     def compute_geodesic_control(self, delta):
         """Computes geodesic control from \delta \in H^\ast."""
-        for i in range(self.__nb_module):
-            self.__module_list[i].compute_geodesic_control(delta[self.__indice_controls[i]:self.__indice_controls[i+1]])
+        for i in range(self.nb_module):
+            self.__module_list[i].compute_geodesic_control(delta[i])
 
