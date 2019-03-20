@@ -184,7 +184,7 @@ class CompoundTest2D(unittest.TestCase):
         self.compound.fill_controls(self.controls)
 
     def test_compound(self):
-        self.assertEqual(self.compound.module_dict, [self.silent, self.trans])
+        self.assertEqual(self.compound.module_list, [self.silent, self.trans])
         self.assertEqual(self.compound.dim_controls, 2*self.nb_pts_trans)
 
         self.assertEqual(self.compound.manifold.nb_pts, self.nb_pts)

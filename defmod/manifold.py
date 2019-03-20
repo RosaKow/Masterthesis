@@ -8,8 +8,9 @@ class Manifold:
     def __init__(self):
         super().__init__()
 
+    # We would idealy use deepcopy but only graph leaves Tensors supports it right now
     def copy(self):
-        return copy.copy(self)
+        raise NotImplementedError
 
     @property
     def dim_gd(self):
@@ -30,17 +31,22 @@ class Landmarks(Manifold):
         self.__dim = dim
         self.__dim_gd = nb_pts*dim
 
-        self.__gd = torch.zeros(nb_pts, dim).view(-1).requires_grad_()
+        self.__gd = torch.zeros(nb_pts, dim, requires_grad=True).view(-1)
         if isinstance(gd, torch.Tensor):
-            self.fill_gd(gd)
+            self.fill_gd(gd.requires_grad_())
 
-        self.__tan = torch.zeros(nb_pts, dim).view(-1).requires_grad_()
+        self.__tan = torch.zeros(nb_pts, dim, requires_grad=True).view(-1).requires_grad_()
         if isinstance(tan, torch.Tensor):
-            self.fill_tan(tan)
+            self.fill_tan(tan.requires_grad_())
 
-        self.__cotan = torch.zeros(nb_pts, dim).view(-1).requires_grad_()
+        self.__cotan = torch.zeros(nb_pts, dim, requires_grad=True).view(-1).requires_grad_()
         if isinstance(cotan, torch.Tensor):
-            self.fill_cotan(cotan)
+            self.fill_cotan(cotan.requires_grad_())
+
+    def copy(self):
+        out = Landmarks(self.__dim, self.__nb_pts)
+        out.fill(self, copy=True)
+        return out
 
     @property
     def nb_pts(self):
@@ -63,19 +69,28 @@ class Landmarks(Manifold):
     def __get_cotan(self):
         return self.__cotan
 
-    def fill(self, manifold):
-        self.fill_gd(manifold.gd)
-        self.fill_tan(manifold.tan)
-        self.fill_cotan(manifold.cotan)
+    def fill(self, manifold, copy=False):
+        self.fill_gd(manifold.gd, copy=copy)
+        self.fill_tan(manifold.tan, copy=copy)
+        self.fill_cotan(manifold.cotan, copy=copy)
 
-    def fill_gd(self, gd):
-        self.__gd = gd
+    def fill_gd(self, gd, copy=False):
+        if copy:
+            self.__gd = gd.detach().clone().requires_grad_()
+        else:
+            self.__gd = gd
 
-    def fill_tan(self, tan):
-        self.__tan = tan
+    def fill_tan(self, tan, copy=False):
+        if copy:
+            self.__tan = tan.detach().clone().requires_grad_()
+        else:
+            self.__tan = tan
 
-    def fill_cotan(self, cotan):
-        self.__cotan = cotan
+    def fill_cotan(self, cotan, copy=False):
+        if copy:
+            self.__cotan = cotan.detach().clone().requires_grad_()
+        else:
+            self.__cotan = cotan
 
     gd = property(__get_gd, fill_gd)
     tan = property(__get_tan, fill_tan)
@@ -99,6 +114,15 @@ class Landmarks(Manifold):
         else:
             self.__cotan = self.__cotan + scale*cotan.__cotan
 
+    def negate_gd(self):
+        self.__gd = -self.__gd
+
+    def negate_tan(self):
+        self.__tan = -self.__tan
+
+    def negate_cotan(self):
+        self.__cotan = -self.__cotan
+
     def inner_prod_module(self, module):
         man = self.action(module)
         return torch.dot(self.__cotan.view(-1), man.tan.view(-1))
@@ -116,6 +140,10 @@ class CompoundManifold(Manifold):
         self.__dim = self.__manifold_list[0].dim
         self.__nb_pts = sum([m.nb_pts for m in self.__manifold_list])
         self.__dim_gd = sum([m.dim_gd for m in self.__manifold_list])
+
+    def copy(self):
+        manifold_list = [m.copy() for m in self.__manifold_list]
+        return CompoundManifold(manifold_list)
 
     @property
     def manifold_list(self):
@@ -149,22 +177,22 @@ class CompoundManifold(Manifold):
     def __get_cotan(self):
         return [m.cotan for m in self.__manifold_list]
 
-    def fill(self, manifold):
-        self.fill_gd(manifold.gd)
-        self.fill_tan(manifold.tan)
-        self.fill_cotan(manifold.cotan)
+    def fill(self, manifold, copy=False):
+        self.fill_gd(manifold.gd, copy=copy)
+        self.fill_tan(manifold.tan, copy=copy)
+        self.fill_cotan(manifold.cotan, copy=copy)
 
-    def fill_gd(self, gd):
+    def fill_gd(self, gd, copy=False):
         assert len(gd) == self.nb_manifold
         for i in range(len(self.__manifold_list)):
             self.__manifold_list[i].fill_gd(gd[i])
 
-    def fill_tan(self, tan):
+    def fill_tan(self, tan, copy=False):
         assert len(tan) == self.nb_manifold
         for i in range(len(self.__manifold_list)):
             self.__manifold_list[i].fill_tan(tan[i])
 
-    def fill_cotan(self, cotan):
+    def fill_cotan(self, cotan, copy=False):
         assert len(cotan) == self.nb_manifold
         for i in range(len(self.__manifold_list)):
             self.__manifold_list[i].fill_cotan(cotan[i])
@@ -184,6 +212,18 @@ class CompoundManifold(Manifold):
     def muladd_cotan(self, cotan, scale):
         for i in range(len(self.__manifold_list)):
             self.__manifold_list[i].muladd_cotan(cotan[i], scale)
+
+    def negate_gd(self):
+        for m in self.__manifold_list:
+            m.negate_gd()
+
+    def negate_tan(self):
+        for m in self.__manifold_list:
+            m.negate_tan()
+
+    def negate_cotan(self):
+        for m in self.__manifold_list:
+            m.negate_cotan()
 
     def inner_prod_module(self, module):
         return sum([m.inner_prod_module(module) for m in self.__manifold_list])

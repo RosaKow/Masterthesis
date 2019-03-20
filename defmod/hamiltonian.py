@@ -10,7 +10,7 @@ from .kernels import scal
 from .usefulfunctions import make_grad_graph
 from .deformationmodules import CompoundModule
 
-class Hamiltonian(nn.Module):
+class Hamiltonian:
     def __init__(self, module_list):
         assert isinstance(module_list, Iterable)
         super().__init__()
