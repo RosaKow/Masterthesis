@@ -1,5 +1,6 @@
-from pykeops.torch import Kernel, kernel_product, Genred
-from pykeops.torch.kernel_product.formula import *
+"""from pykeops.torch import Kernel, kernel_product, Genred
+from pykeops.torch.kernel_product.formula import *"""
+import torch
 
 
 def scal(x, y):
@@ -17,16 +18,16 @@ def sqdistances(x, y):
     return ((x.unsqueeze(1) - y.unsqueeze(0))**2).sum(2)
 
 
-def K_xx(x, sigma = .1):
+def K_xx(x, sigma):
     """Kernel matrix for x."""
     return (-sqdistances(x, x)/sigma**2).exp()
 
 
-def K_xy(x, y, sigma = .1):
+def K_xy(x, y, sigma):
     """Kernel matrix between x and y."""
     return (-sqdistances(x, y)/sigma**2).exp()
 
-
+"""
 def gauss_kernel(sigma):
     p = torch.tensor([1/sigma/sigma])
     def K(x, y, b):
@@ -39,4 +40,4 @@ def gauss_kernel(sigma):
         my_routine = Genred(formula, variables, reduction_op='Sum', axis=1)
         return my_routine(x, y, b, p, backend="auto")
     return K
-
+"""
