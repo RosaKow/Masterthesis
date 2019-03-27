@@ -85,7 +85,7 @@ def plot_MultiGrid(phi, grid, label):
             x[i,j] = phi[label[i,j].numpy().astype(int)-1][0][i,j]
             y[i,j] = phi[label[i,j].numpy().astype(int)-1][1][i,j]
             
-    plot_grid(x, y)
+    plot_grid(x, y, color='blue')
     return x,y
 
 
@@ -114,7 +114,7 @@ def shootMultishape(gd_list0, mom_list0, h, Constr, sigma, dim, n=10):
         l_list = lambda_qp(gd[-1], mom[-1], sigma, z, dim)
         controls_list = h_qp(gd[-1], mom[-1], l_list, sigma, z, dim)
 
-        [d_gd1, d_gd2, d_gd3, d_mom1, d_mom2, d_mom3] = torch.autograd.grad(h(gd[-1], mom[-1], controls_list, z, l_list, Constr),[*gd[-1], *mom[-1]], create_graph=True)  # differentiate wrt [gd_list, mom_list] or [gd[-1], mom[-1]]?
+        [d_gd1, d_gd2, d_gd3, d_mom1, d_mom2, d_mom3] = torch.autograd.grad(h(gd[-1], mom[-1], controls_list, l_list, Constr),[*gd[-1], *mom[-1]], create_graph=True)  # differentiate wrt [gd_list, mom_list] or [gd[-1], mom[-1]]?
         
         gd_list[0] = gd_list[0] + step*d_mom1
         gd_list[1] = gd_list[1] + step*d_mom2

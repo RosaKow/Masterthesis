@@ -4,6 +4,7 @@ import torch.nn as nn
 from torch.autograd import grad
 
 from kernels import scal
+import multimodule_usefulfunctions as mm
 
 class Hamiltonian_Multishape(nn.Module):
     def __init__(self, module_list, dim_controls):
@@ -14,17 +15,20 @@ class Hamiltonian_Multishape(nn.Module):
         self.__init_controls = [torch.zeros(dim_controls[0], requires_grad=True), torch.zeros(dim_controls[1], requires_grad=True), torch.zeros(dim_controls[2], requires_grad=True)]
     
 
-    def __call__(self, gd_list, mom_list, controls_list, z, l_list, Constr):
+    def __call__(self, gd_list, mom_list, controls_list, l_list, Constr):
         """Computes the hamiltonian."""
+        z = [mm.computeCenter(gd_list[0]), mm.computeCenter(gd_list[1])]
         gd_module_list = [z[0], z[1], gd_list[2]]
-        cost = self.def_cost(gd_list, controls_list, z)
+        cost = self.def_cost(gd_list, controls_list)
         applmom = self.apply_mom(gd_list, gd_module_list, mom_list, controls_list)
         applconstr = self.apply_constraints(gd_list, gd_module_list, l_list, controls_list, Constr)
         
         return applmom - cost - applconstr
 
     
-    def def_cost(self, gd_list, controls_list, z):
+    def def_cost(self, gd_list, controls_list):
+        z = [mm.computeCenter(gd_list[0]), mm.computeCenter(gd_list[1])]
+
         gd = [z[0], z[1], gd_list[2]]
         
         cost = 0
