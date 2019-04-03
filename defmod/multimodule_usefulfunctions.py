@@ -104,9 +104,6 @@ def shootMultishape(gd_list0, mom_list0, h, Constr, sigma, dim, n=10):
 
     
     nb_points = [len(gd_list[0]), len(gd_list[1])]
-    #Constr1 = torch.cat([torch.eye(nb_points[0]), torch.zeros([nb_points[0], nb_points[1]]), -torch.eye(nb_points[0]), torch.zeros([nb_points[0], nb_points[1]])], 1)
-    #Constr2 = torch.cat([torch.zeros([nb_points[1], nb_points[0]]), torch.eye(nb_points[1]), torch.zeros([nb_points[1], nb_points[0]]), -torch.eye(nb_points[1]),], 1)
-    #Constr = [Constr1, Constr2]
 
     for i in range(n):  
         z = [computeCenter(gd[-1][0]), computeCenter(gd[-1][1])]

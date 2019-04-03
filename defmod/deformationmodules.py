@@ -2,7 +2,7 @@ import torch
 import numpy as np
 
 
-from kernels import K_xx, K_xy
+from .kernels import K_xx, K_xy
 
 
 class DeformationModule(torch.nn.Module):
