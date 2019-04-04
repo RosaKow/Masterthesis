@@ -43,9 +43,7 @@ class TestTranslations2D(unittest.TestCase):
         self.assertEqual(cost, torch.tensor([0.]))
 
     def test_compute_geodesic_control(self):
-        delta = torch.rand_like(self.gd)
-
-        self.trans.compute_geodesic_control(delta)
+        self.trans.compute_geodesic_control(self.trans.manifold)
 
         self.assertIsInstance(self.trans.controls, torch.Tensor)
         self.assertEqual(self.trans.controls.shape, self.gd.shape)
@@ -76,17 +74,18 @@ class TestTranslations2D(unittest.TestCase):
         self.assertTrue(torch.autograd.gradcheck(cost, (self.gd, self.controls), raise_exception=False))
 
     def test_gradcheck_compute_geodesic_control(self):
-        def compute_geodesic_control(delta, gd):
+        def compute_geodesic_control(gd, mom):
             self.trans.manifold.gd = gd
+            self.trans.manifold.cotan = mom
 
-            self.trans.compute_geodesic_control(delta)
+            self.trans.compute_geodesic_control(self.trans.manifold)
 
             return self.trans.controls
 
-        delta = torch.rand_like(self.gd, requires_grad=True)
         self.gd.requires_grad_()
+        self.mom.requires_grad_()
 
-        self.assertTrue(torch.autograd.gradcheck(compute_geodesic_control, (delta, self.gd), raise_exception=False))
+        self.assertTrue(torch.autograd.gradcheck(compute_geodesic_control, (100.*self.gd, self.mom), raise_exception=False))
 
 
 class TestSilentPoints2D(unittest.TestCase):
@@ -117,9 +116,7 @@ class TestSilentPoints2D(unittest.TestCase):
         self.assertEqual(cost, torch.tensor([0.]))
 
     def test_compute_geodesic_control(self):
-        delta = torch.rand_like(self.gd)
-
-        self.silent_points.compute_geodesic_control(delta)
+        self.silent_points.compute_geodesic_control(self.silent_points.manifold)
         
         self.assertIsInstance(self.silent_points.controls, torch.Tensor)
         self.assertEqual(self.silent_points.controls.shape, torch.tensor([]).shape)
@@ -150,17 +147,18 @@ class TestSilentPoints2D(unittest.TestCase):
         self.assertTrue(torch.autograd.gradcheck(cost, (self.gd, self.controls), raise_exception=False))
 
     def test_gradcheck_compute_geodesic_control(self):
-        def compute_geodesic_control(delta, gd):
+        def compute_geodesic_control(gd, mom):
             self.silent_points.manifold.gd = gd
+            self.silent_points.manifold.cotan = mom
 
-            self.silent_points.compute_geodesic_control(delta)
+            self.silent_points.compute_geodesic_control(self.silent_points.manifold)
 
             return self.silent_points.controls
 
-        delta = torch.rand_like(self.gd, requires_grad=True)
         self.gd.requires_grad_()
+        self.mom.requires_grad_()
 
-        self.assertTrue(torch.autograd.gradcheck(compute_geodesic_control, (delta, self.gd), raise_exception=False))
+        self.assertTrue(torch.autograd.gradcheck(compute_geodesic_control, (self.gd, self.mom), raise_exception=False))
 
 
 class CompoundTest2D(unittest.TestCase):
@@ -210,9 +208,7 @@ class CompoundTest2D(unittest.TestCase):
         self.assertEqual(cost.shape, torch.tensor(0.).shape)
 
     def test_compute_geodesic_control(self):
-        delta = [None, torch.rand_like(self.controls_trans)]
-
-        self.compound.compute_geodesic_control(delta)
+        self.compound.compute_geodesic_control(self.compound.manifold)
 
         self.assertIsInstance(self.compound.controls, list)
         self.assertIsInstance(self.compound.controls[0], torch.Tensor)
@@ -246,16 +242,17 @@ class CompoundTest2D(unittest.TestCase):
         self.assertTrue(torch.autograd.gradcheck(cost, (self.gd_silent, self.gd_trans, self.controls_trans), raise_exception=False))
 
     def test_gradcheck_compute_geodesic_control(self):
-        def compute_geodesic_control(delta_trans, gd_silent, gd_trans):
+        def compute_geodesic_control(gd_silent, gd_trans, mom_silent, mom_trans):
             self.compound.manifold.fill_gd([gd_silent, gd_trans])
-            self.compound.compute_geodesic_control([None, delta_trans])
+            self.compound.manifold.fill_cotan([mom_silent, mom_trans])
+            self.compound.compute_geodesic_control(self.compound.manifold)
 
-            # TODO: why does it work only for controls[1] and not controls?
-            return self.compound.controls[1]
+            return self.compound.controls
 
-        delta_trans = torch.rand_like(self.gd_trans, requires_grad=True)
         self.gd_silent.requires_grad_()
         self.gd_trans.requires_grad_()
+        self.mom_silent.requires_grad_()
+        self.mom_trans.requires_grad_()
 
-        self.assertTrue(torch.autograd.gradcheck(compute_geodesic_control, (delta_trans, self.gd_silent, self.gd_trans), raise_exception=False))
+        self.assertTrue(torch.autograd.gradcheck(compute_geodesic_control, (self.gd_silent, self.gd_trans, self.mom_silent, self.mom_trans), raise_exception=False))
 
