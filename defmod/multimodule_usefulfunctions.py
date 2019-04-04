@@ -22,6 +22,16 @@ def kronecker_I2(K):
     Ktilde = torch.mul(tmp, torch.eye(2).repeat(N))
     return Ktilde
 
+def tensor2list(x, nb_pts):
+    x_list = [x[0:nb_pts[0]], x[nb_pts[0]:nb_pts[0]+nb_pts[1]], x[nb_pts[1]+nb_pts[0]:]]
+    return x_list
+
+def list2tensor(x):
+    x_tensor = torch.tensor(x[0])
+    for i in range(len(x)-1):
+        x_tensor = torch.cat([x_tensor, x[1+i]],0)
+    return x_tensor
+
 def pointInCircles(x,y , z, r):
     label = torch.zeros(x.shape)
     for i in range(x.shape[0]):

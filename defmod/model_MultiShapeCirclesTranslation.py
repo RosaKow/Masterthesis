@@ -45,11 +45,9 @@ def gradientdescent(energy, energygradient, X):
         gradE = energygradient(gd, mom)    
         E = energy(gd, mom)
         alpha = 0.01 #armijo(E, gradE, energy, [gd, mom])
-        #Xnew = [X[0], X[1] + alpha*gradE]
-        momnew = mom + alpha*gradE[0]
+        momnew = mom - alpha*gradE[0]
         print(" iter : {}  ,total energy: {}".format(k, E))
         convergence = gill_murray_wright(E, energy(gd, momnew), gradE[0], [gd, mom], [gd, momnew], k)
-        print('convergence', convergence)
         mom = momnew
         k+=1
     print(" iter : {}  ,total energy: {}".format(k, energy(gd, mom)))
@@ -101,10 +99,10 @@ class EnergyFunctional():
         
         cost = self.cost(z, geodesicControls0)
         attach = self.attach(gd1, self.target)
-        print('cost:', cost)
-        print('attach:', attach)
-        print('gamma:', self.gamma)
-        print('total:', self.gamma*cost + attach)
+        #print('cost:', cost)
+        #print('attach:', attach)
+        #print('gamma:', self.gamma)
+        #print('total:', self.gamma*cost + attach)
         
         return self.gamma*cost + attach
         
@@ -119,8 +117,6 @@ class EnergyFunctional():
         
         cost = self.cost(z, geodesicControls0)
         attach = self.attach(gd1, self.target)
-        print('cost:', cost)
-        print('attach:', attach)
         
         return self.gamma*cost + attach
     
