@@ -19,7 +19,7 @@ class TestLandmarks(unittest.TestCase):
 
         self.assertEqual(landmarks.nb_pts, self.nb_pts)
         self.assertEqual(landmarks.dim, 2)
-        self.assertEqual(landmarks.dim_gd, 2*self.nb_pts)
+        self.assertEqual(landmarks.numel_gd, 2*self.nb_pts)
         self.assertTrue(torch.allclose(landmarks.gd, self.gd))
         self.assertTrue(torch.allclose(landmarks.tan, self.tan))
         self.assertTrue(torch.allclose(landmarks.cotan, self.cotan))
@@ -31,9 +31,9 @@ class TestLandmarks(unittest.TestCase):
         landmarks.fill_tan(self.tan)
         landmarks.fill_cotan(self.cotan)
 
-        self.assertTrue(torch.allclose(landmarks.gd, self.gd))
-        self.assertTrue(torch.allclose(landmarks.tan, self.tan))
-        self.assertTrue(torch.allclose(landmarks.cotan, self.cotan))
+        self.assertEqual(landmarks.gd, self.gd)
+        self.assertEqual(landmarks.tan, self.tan)
+        self.assertEqual(landmarks.cotan, self.cotan)
 
     def test_assign(self):
         landmarks = dm.manifold.Landmarks(2, self.nb_pts)
@@ -187,7 +187,7 @@ class TestCompoundManifold(unittest.TestCase):
     def test_constructor(self):
         self.assertEqual(self.compound.nb_pts, self.nb_pts0+self.nb_pts1)
         self.assertEqual(self.compound.dim, 2)
-        self.assertEqual(self.compound.dim_gd, 2*self.nb_pts0+2*self.nb_pts1)
+        self.assertEqual(self.compound.numel_gd, 2*self.nb_pts0+2*self.nb_pts1)
         self.assertEqual(self.compound.nb_manifold, 2)
         self.assertEqual(len(self.compound.gd), 2)
         self.assertTrue(torch.all(torch.eq(self.compound.gd[0], self.gd0)))

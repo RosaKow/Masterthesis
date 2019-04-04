@@ -35,6 +35,9 @@ class Model():
     def __init__(self):
         super().__init__()
 
+    def compute(self):
+        raise NotImplementedError
+
     def fidelity(self, target):
         raise NotImplementedError
 
@@ -43,12 +46,6 @@ class Model():
 
     def transform_target(self, target):
         return target
-
-    def cost(self, target):
-        #self.shoot()
-        deformation_cost = self.compound.cost()
-        attach = self.fidelity(target)
-        return attach, deformation_cost
 
     def fit(self, target, lr=1e-3, l=1., max_iter=100, tol=1e-7, log_interval=10):
         transformed_target = self.transform_target(target)
@@ -61,11 +58,11 @@ class Model():
         def closure():
             self.nit += 1
             optimizer.zero_grad()
-            attach, deformation_cost = self.cost(transformed_target)
-            attach = l*attach
-            cost = attach + deformation_cost
+            self.compute(transformed_target)
+            attach = l*self.attach
+            cost = attach + self.deformation_cost
             if(self.nit%log_interval == 0):
-                print("It: %d, deformation cost: %.6f, attach: %.6f. Total cost: %.6f" % (self.nit, deformation_cost.detach().numpy(), attach.detach().numpy(), cost.detach().numpy()))
+                print("It: %d, deformation cost: %.6f, attach: %.6f. Total cost: %.6f" % (self.nit, self.deformation_cost.detach().numpy(), attach.detach().numpy(), cost.detach().numpy()))
 
             costs.append(cost.item())
 
@@ -73,8 +70,6 @@ class Model():
                 self.break_loop = True
             else:
                 cost.backward(retain_graph=True)
-
-            self.clear_shot()
 
             #make_grad_graph(cost, str("cost" + str(self.nit)))
             
@@ -93,15 +88,14 @@ class Model():
 class ModelCompound(Model):
     def __init__(self, modules, fixed):
         super().__init__()
-        self.__module_list = modules
+        self.__modules = modules
         self.__fixed = fixed
 
-        self.__compound = CompoundModule(self.__module_list)
-        self.__init_manifold = self.__compound.manifold.copy()
+        self.__init_manifold = CompoundModule(self.__modules).manifold.copy()
 
         self.__parameters = []
 
-        for i in range(len(self.__module_list)):
+        for i in range(len(self.__modules)):
             self.__parameters.append(self.__init_manifold[i].cotan)
             if(not self.__fixed[i]):
                 self.__parameters.append(self.__init_manifold[i].gd)
@@ -109,16 +103,12 @@ class ModelCompound(Model):
         self.__shot = False
 
     @property
-    def module_list(self):
-        return self.__module_list
+    def modules(self):
+        return self.__modules
 
     @property
     def fixed(self):
         return self.__fixed
-
-    @property
-    def compound(self):
-        return self.__compound
 
     @property
     def init_manifold(self):
@@ -132,20 +122,6 @@ class ModelCompound(Model):
     def shot(self):
         return self.__shot
 
-    def clear_shot(self):
-        self.__shot = False
-
-    def reset_state(self):
-        self.compound.manifold.fill(self.__init_manifold, copy=True)
-        self.__shot = False
-
-    def shoot(self, it=3):
-        if not self.__shot:
-            self.reset_state()
-            h = Hamiltonian(self.__compound)
-            shoot(h, it=2, method='rk4')
-            self.__shot = True
-
     def compute_deformation_grid(self, grid_origin, grid_size, grid_resolution, it=2, intermediate=False):
         x, y = torch.meshgrid([
             torch.linspace(grid_origin[0], grid_origin[0]+grid_size[0], grid_resolution[0]),
@@ -153,11 +129,13 @@ class ModelCompound(Model):
 
         gridpos = grid2vec(x, y)
 
-        self.reset_state()
+        
         grid_landmarks = Landmarks(2, gridpos.shape[0], gd=gridpos.view(-1))
         grid_silent = SilentPoints(grid_landmarks)
+        compound = CompoundModule(self.modules)
+        compound.manifold.fill(self.init_manifold)
 
-        intermediate = shoot(Hamiltonian([grid_silent, *self.module_list]))
+        intermediate = shoot(Hamiltonian([grid_silent, *compound]))
 
         return vec2grid(grid_landmarks.gd.view(-1, 2).detach(), grid_resolution[0], grid_resolution[1])
 
@@ -171,43 +149,58 @@ class ModelCompoundWithPointsRegistration(ModelCompound):
 
         super().__init__(module_list, fixed)
 
-    def fidelity(self, target, it=10):
-        return fidelity(self(), target)
+    def compute(self, target):
+        compound = CompoundModule(self.modules)
+        compound.manifold.fill(self.init_manifold)
+        h = Hamiltonian(compound)
+        shoot(h, it=2, method='rk4')
+        self.__shot_points = compound[0].manifold.gd.view(-1, 2)
+        self.shot_manifold = compound.manifold.copy()
+        self.deformation_cost = compound.cost()
+        self.attach = self.fidelity(target)
 
-    def __call__(self, it=3):
-        self.shoot(it=it)
-        return self.compound[0].manifold.gd.view(-1, 2), self.alpha
+    def fidelity(self, target):
+        return fidelity((self.__shot_points, self.alpha), target)
+
+    def __call__(self):
+        return self.__shot_points, self.alpha
 
 
 class ModelCompoundImageRegistration(ModelCompound):
-    def __init__(self, source_image, module_list, fixed, img_transform=lambda x: x):
+    def __init__(self, source_image, modules, fixed, img_transform=lambda x: x):
         self.__frame_res = source_image.shape
         self.__source = sample_from_greyscale(source_image.clone(), 0., centered=False, normalise_weights=False, normalise_position=False)
         self.__img_transform = img_transform
-        super().__init__(module_list, fixed)
+        super().__init__(modules, fixed)
 
     def transform_target(self, target):
         return self.__img_transform(target)
 
+    def compute(self, target):
+        # First, forward step shooting only the deformation modules
+        compound = CompoundModule(self.modules)
+        compound.manifold.fill(self.init_manifold)
+        shoot(Hamiltonian(compound), it=4)
+        self.shot_manifold = compound.manifold.copy()
+
+        # Prepare for reverse shooting
+        compound.manifold.negate_cotan()
+
+        image_landmarks = Landmarks(2, self.__source[0].shape[0], gd=self.__source[0].view(-1))
+        compound = CompoundModule([SilentPoints(image_landmarks), *compound])
+
+        # Then, reverse shooting in order to get the final deformed image
+        intermediate = shoot(Hamiltonian(compound), it=8)
+
+        self.__output_image = deformed_intensities(compound[0].manifold.gd.view(-1, 2), self.__source[1].view(self.__frame_res)).clone()
+
+        # Compute attach and deformation cost
+        self.attach = self.fidelity(target)
+        self.deformation_cost = compound.cost()
+
     def fidelity(self, target):
-        return L2_norm_fidelity(self(), target)
+        return L2_norm_fidelity(self.__output_image, target)
 
-    def __call__(self, it=2, intermediate=False):
-        if not self.shot:
-            # First, forward step shooting only the deformation modules
-            self.reset_state()
-            self.shoot(it=6)
-
-            # Prepare for reverse shooting
-            self.compound.manifold.negate_cotan()
-
-            image_landmarks = Landmarks(2, self.__source[0].shape[0], gd=self.__source[0].view(-1))
-            compound = [SilentPoints(image_landmarks), *self.compound]
-
-            # Then, reverse shooting in order to get the final deformed image
-            intermediate = shoot(Hamiltonian(compound), it=6)
-
-            self.__output_image = deformed_intensities(compound[0].manifold.gd.view(-1, 2), self.__source[1].view(self.__frame_res))
-
+    def __call__(self):
         return self.__output_image
 

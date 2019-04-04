@@ -11,10 +11,13 @@ from .usefulfunctions import make_grad_graph
 from .deformationmodules import CompoundModule
 
 class Hamiltonian:
-    def __init__(self, module_list):
-        assert isinstance(module_list, Iterable)
+    def __init__(self, modules):
+        assert isinstance(modules, Iterable) or isinstance(modules, CompoundModule)
         super().__init__()
-        self.__module = CompoundModule(module_list)
+        if isinstance(modules, Iterable):
+            self.__module = CompoundModule(modules)
+        else:
+            self.__module = modules
 
     @classmethod
     def from_hamiltonian(cls, class_instance):
@@ -33,7 +36,5 @@ class Hamiltonian:
         return self.__module.manifold.inner_prod_module(self.__module)
 
     def geodesic_controls(self):
-        self.__module.fill_controls_zero()
-        controls = grad(self.apply_mom(), self.__module.controls, create_graph=True, allow_unused=True)
-        self.module.compute_geodesic_control(list(controls))
+        self.__module.compute_geodesic_control(self.__module.manifold)
 

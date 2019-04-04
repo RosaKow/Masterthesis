@@ -4,7 +4,8 @@ from collections import Iterable
 import torch
 import numpy as np
 
-from .kernels import gauss_kernel, K_xx, K_xy
+from .structuredfield import StructuredField_Null, StructuredField_0, CompoundStructuredField
+from .kernels import gauss_kernel, K_xx, K_xy, compute_sks
 from .manifold import Landmarks, CompoundManifold
 from .usefulfunctions import make_grad_graph
 
@@ -69,7 +70,7 @@ class Translations(DeformationModule):
 
     def __call__(self, points):
         """Applies the generated vector field on given points."""
-        K_q = K_xy(points, self.manifold.gd.view(-1, self.__manifold.dim), self.__sigma)
+        K_q = K_xy(points, self.__manifold.gd.view(-1, self.__manifold.dim), self.__sigma)
         return torch.mm(K_q, self.__controls.view(-1, self.__manifold.dim))
 
     def cost(self):
@@ -78,16 +79,25 @@ class Translations(DeformationModule):
         m = torch.mm(K_q, self.controls.view(-1, self.__manifold.dim))
         return 0.5*torch.dot(m.view(-1), self.__controls.view(-1))
 
-    def compute_geodesic_control(self, delta):
-        """Computes geodesic control from \delta \in H^\ast."""
+    def compute_geodesic_control(self, man):
+        """Computes geodesic control from StructuredField vs."""
+        vs = self.adjoint(man)
         K_q = K_xx(self.manifold.gd.view(-1, self.__manifold.dim), self.__sigma)
-        controls, _ = torch.gesv(delta.view(-1, self.__manifold.dim), K_q)
-        self.controls = controls.contiguous().view(-1)
+        controls, _ = torch.gesv(vs(self.manifold.gd.view(-1, self.manifold.dim)), K_q)
+        self.__controls = controls.contiguous().view(-1)
+
+    def field_generator(self):
+        return StructuredField_0(self.__manifold.gd.view(-1, self.__manifold.dim),
+                                 self.__manifold.cotan.view(-1, self.__manifold.dim), self.__sigma)
+
+    def adjoint(self, manifold):
+        return manifold.cot_to_vs(self.__sigma)
 
 
 class SilentPoints(DeformationModule):
     """Module handling silent points."""
     def __init__(self, manifold):
+        assert isinstance(manifold, Landmarks)
         super().__init__()
         self.__manifold = manifold        
 
@@ -118,9 +128,15 @@ class SilentPoints(DeformationModule):
         """Returns the cost."""
         return torch.tensor(0.)
 
-    def compute_geodesic_control(self, delta):
-        """Computes geodesic control from \delta \in H^\ast."""
+    def compute_geodesic_control(self, man):
+        """Computes geodesic control from StructuredField vs. For SilentPoints, does nothing."""
         pass
+
+    def field_generator(self):
+        return StructuredField_Null()
+    
+    def adjoint(self, manifold):
+        return StructuredField_Null()
 
 
 class CompoundModule(DeformationModule, Iterable):
@@ -190,8 +206,11 @@ class CompoundModule(DeformationModule, Iterable):
 
         return sum(cost_list)
 
-    def compute_geodesic_control(self, delta):
+    def compute_geodesic_control(self, vs):
         """Computes geodesic control from \delta \in H^\ast."""
         for i in range(self.nb_module):
-            self.__module_list[i].compute_geodesic_control(delta[i])
+            self.__module_list[i].compute_geodesic_control(vs)
+
+    def field_generator(self):
+        return CompoundStructuredField([m.field_generator() for m in self.__module_list])
 

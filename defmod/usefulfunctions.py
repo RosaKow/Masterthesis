@@ -64,6 +64,12 @@ class AABB:
     def area(self):
         return (self.__xmax - self.__xmin)*(self.ymax - self.ymin)
 
+    def squared(self):
+        self.__xmin = min(self.__xmin, self.__ymin)
+        self.__ymin = min(self.__xmin, self.__ymin)
+        self.__xmax = max(self.__xmax, self.__ymax)
+        self.__ymax = max(self.__xmax, self.__ymax)
+
 
 def flatten_tensor_list(l, out_list=[]):
     """Very simple, recursive, list flattening functions that stops at the torch.Tensor (without unwrapping them). Should work well for lists that are not too much nested."""
@@ -85,9 +91,21 @@ def vec2grid(vec, nx, ny):
     """Convert a tensor of vectors to a grid of points."""
     return vec.t()[0].view(nx, ny).contiguous(), vec.t()[1].view(nx, ny).contiguous()
 
+
 def indices2coords(indices, shape, pixel_size=torch.tensor([1., 1.])):
     # return torch.tensor([pixel_size[1]*indices[:, 1], pixel_size[0]*(shape[0] - indices[:, 0] - 1)])
     return torch.cat([(pixel_size[0]*indices[:, 0]).view(-1, 1), (pixel_size[1]*(shape[1] - indices[:, 1] - 1)).view(-1, 1)], 1)
+
+
+def blocks_to_2d(M):
+    """Transforms a block matrix tensor (N x dim_block x dim_block) into a 2D square block matrix."""
+    N = int(np.sqrt(M.shape[0]))
+    assert N**2 == M.shape[0]
+    return torch.cat([torch.cat([M[i::N] for i in range(N)], dim=1).transpose(1, 2)[i] for i in range(N)])
+
+
+def rotation_matrix(theta):
+    return torch.tensor([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
 
 
 def plot_tensor_scatter(x, alpha=1., scale=64.):
