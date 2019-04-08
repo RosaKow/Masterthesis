@@ -88,7 +88,7 @@ class Translations(DeformationModule):
 
     def field_generator(self):
         return StructuredField_0(self.__manifold.gd.view(-1, self.__manifold.dim),
-                                 self.__manifold.cotan.view(-1, self.__manifold.dim), self.__sigma)
+                                 self.__controls.view(-1, self.__manifold.dim), self.__sigma)
 
     def adjoint(self, manifold):
         return manifold.cot_to_vs(self.__sigma)
