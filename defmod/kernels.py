@@ -3,6 +3,9 @@ import numpy as np
 # from pykeops.torch import Kernel, kernel_product, Genred
 # from pykeops.torch.kernel_product.formula import *
 
+from .usefulfunctions import blocks_to_2d
+
+
 def scal(x, y):
     """Scalar product between two vectors."""
     return torch.dot(x.view(-1), y.view(-1))

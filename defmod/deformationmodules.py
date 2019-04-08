@@ -4,7 +4,6 @@ from collections import Iterable
 import torch
 import numpy as np
 
-from .kernels import K_xx, K_xy, gauss_kernel
 from .structuredfield import StructuredField_Null, StructuredField_0, CompoundStructuredField
 from .kernels import gauss_kernel, K_xx, K_xy, compute_sks
 from .manifold import Landmarks, CompoundManifold
