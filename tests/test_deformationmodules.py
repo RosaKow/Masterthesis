@@ -30,6 +30,9 @@ class TestTranslations2D(unittest.TestCase):
         
         self.assertEqual(torch.all(torch.eq(result, torch.zeros_like(result))), True)
 
+    def test_field_generator(self):
+        self.assertIsInstance(self.trans.field_generator(), dm.structuredfield.StructuredField_0)
+
     def test_cost(self):
         cost = self.trans.cost()
 
@@ -107,6 +110,9 @@ class TestSilentPoints2D(unittest.TestCase):
         self.assertIsInstance(result, torch.Tensor)
         self.assertEqual(result.shape, points.shape)
         self.assertEqual(torch.all(torch.eq(result, torch.zeros_like(points))), True)
+
+    def test_field_generator(self):
+        self.assertIsInstance(self.silent_points.field_generator(), dm.structuredfield.StructuredField_Null)
 
     def test_cost(self):
         cost = self.silent_points.cost()
@@ -200,6 +206,10 @@ class CompoundTest2D(unittest.TestCase):
         result = self.compound(points)
 
         self.assertEqual(torch.all(torch.eq(result, torch.zeros_like(points))), True)
+
+    def test_field_generator(self):
+        self.assertIsInstance(self.compound[0].field_generator(), dm.structuredfield.StructuredField_Null)
+        self.assertIsInstance(self.compound[1].field_generator(), dm.structuredfield.StructuredField_0)
 
     def test_cost(self):
         cost = self.compound.cost()

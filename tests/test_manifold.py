@@ -31,9 +31,9 @@ class TestLandmarks(unittest.TestCase):
         landmarks.fill_tan(self.tan)
         landmarks.fill_cotan(self.cotan)
 
-        self.assertEqual(landmarks.gd, self.gd)
-        self.assertEqual(landmarks.tan, self.tan)
-        self.assertEqual(landmarks.cotan, self.cotan)
+        self.assertTrue(torch.all(torch.eq(landmarks.gd, self.gd)))
+        self.assertTrue(torch.all(torch.eq(landmarks.tan, self.tan)))
+        self.assertTrue(torch.all(torch.eq(landmarks.cotan, self.cotan)))
 
     def test_assign(self):
         landmarks = dm.manifold.Landmarks(2, self.nb_pts)
@@ -86,7 +86,7 @@ class TestLandmarks(unittest.TestCase):
         inner_prod = landmarks.inner_prod_module(trans)
 
         self.assertIsInstance(inner_prod, torch.Tensor)
-        self.assertEqual(inner_prod.shape, torch.Size([]))        
+        self.assertEqual(inner_prod.shape, torch.Size([]))
 
     def test_gradcheck_fill(self):
         def fill_gd(gd):

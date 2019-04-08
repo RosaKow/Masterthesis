@@ -6,13 +6,13 @@ from torchdiffeq import odeint_adjoint
 from .usefulfunctions import make_grad_graph
 
 
+
 def shoot_euler(h, it=10):
     step = 1. / it
 
     intermediate = [h.module.manifold.copy()]
     for i in range(it):
         h.geodesic_controls()
-        #print(h.module.controls)
         l = [*h.module.manifold.unroll_gd(), *h.module.manifold.unroll_cotan()]
         delta = grad(h(), l, create_graph=True)
         d_gd = h.module.manifold.roll_gd(list(delta[:int(len(delta)/2)]))
@@ -38,8 +38,8 @@ def shoot(h, it=2, method='rk4'):
 
                 for m in self.module:
                     for i in range(m.manifold.len_gd):
-                        gd.append(x[0][index:index+m.manifold.dim_gd[i]].detach().requires_grad_())
-                        mom.append(x[1][index:index+m.manifold.dim_gd[i]].detach().requires_grad_())
+                        gd.append(x[0][index:index+m.manifold.dim_gd[i]].requires_grad_())
+                        mom.append(x[1][index:index+m.manifold.dim_gd[i]].requires_grad_())
                         index = index + m.manifold.dim_gd[i]
 
                 self.module.manifold.fill_gd(self.module.manifold.roll_gd(gd))
@@ -69,10 +69,8 @@ def shoot(h, it=2, method='rk4'):
             mom.append(x_1[-1, 1, index:index+m.manifold.dim_gd[i]])
             index = index + m.manifold.dim_gd[i]
 
-    h.module.manifold.roll_gd(gd)
-    h.module.manifold.roll_cotan(mom)
-    h.module.manifold.fill_gd(gd)
-    h.module.manifold.fill_cotan(mom)
+    h.module.manifold.fill_gd(h.module.manifold.roll_gd(gd))
+    h.module.manifold.fill_cotan(h.module.manifold.roll_cotan(mom))
 
     # TODO: very very dirty, change this
     for i in range(0, it):

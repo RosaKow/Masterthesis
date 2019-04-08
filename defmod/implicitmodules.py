@@ -62,7 +62,7 @@ class ImplicitModule0(DeformationModule):
     def cost(self):
         """Returns the cost."""
         K_q = K_xx(self.manifold.gd.view(-1, self.__manifold.dim), self.__sigma)
-        m = torch.mm(controls.view(self.__dim, -1), K_q + self.__nu*torch.eye(self.__nb_pts))
+        m = torch.mm(self.__controls.view(self.__manifold.dim, -1), K_q + self.__nu*torch.eye(self.__manifold.nb_pts))
         return 0.5*torch.dot(m.view(-1), self.__controls.view(-1))
 
     def compute_geodesic_control(self, man):
@@ -148,7 +148,7 @@ class ImplicitModule1(DeformationModule):
         S = torch.tensordot(S, eta(), dims=2)
 
         self.__compute_sks()
-        
+
         tlambdas, _ = torch.gesv(S.view(-1, 1), self.__coeff * self.__sks)
 
         (aq, aqkiaq) = self.__compute_aqkiaq()
@@ -166,7 +166,10 @@ class ImplicitModule1(DeformationModule):
     def __compute_aqh(self, h):
         R = self.__manifold.gd[1].view(-1, 2, 2)
 
-        return torch.stack([torch.tensordot(torch.mm(R[i], torch.mm(torch.diag(torch.tensordot(self.__C[i], h, dims=1)), R[i].t())), eta(), dims=2) for i in range(self.__manifold.nb_pts)])
+        return torch.einsum('nli, nik, k, nui, niv, lvt->nt', R, self.__C, h, torch.eye(self.__manifold.dim).repeat(self.__manifold.nb_pts, 1, 1), torch.transpose(R, 1, 2), eta())
+
+        # TODO: Remove this loop
+        # return torch.stack([torch.tensordot(torch.mm(R[i], torch.mm(torch.diag(torch.tensordot(self.__C[i], h, dims=1)), R[i].t())), eta(), dims=2) for i in range(self.__manifold.nb_pts)])
 
     def __compute_sks(self):
         self.__sks = compute_sks(self.manifold.gd[0].view(-1, self.__manifold.dim), self.sigma, 1) + self.nu * torch.eye(3 * self.manifold.nb_pts)
