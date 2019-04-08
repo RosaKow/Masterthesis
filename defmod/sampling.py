@@ -4,7 +4,7 @@ import matplotlib.image
 import matplotlib.pyplot as plt
 
 from .kernels import K_xy
-from .usefulfunctions import AABB, grid2vec
+from .usefulfunctions import AABB, grid2vec, indices2coords
 
 def load_greyscale_image(filename):
     """Load grescale image from disk as an array of normalised float values."""
@@ -20,11 +20,8 @@ def load_greyscale_image(filename):
 def sample_from_greyscale(image, threshold, centered=False, normalise_weights=False, normalise_position=True):
     """Sample points from a greyscale image. Points are defined as a (position, weight) tuple."""
     length = torch.sum(image >= threshold)
-    points = torch.zeros([length, 2])
+    pos = torch.zeros([length, 2])
     alpha = torch.zeros([length])
-
-    total_weight = torch.sum(points)
-    count = 0
 
     width_weight = 1.
     height_weight = 1.
@@ -33,25 +30,29 @@ def sample_from_greyscale(image, threshold, centered=False, normalise_weights=Fa
         width_weight = 1./image.shape[0]
         height_weight = 1./image.shape[1]
 
+    count = 0
+
     # TODO: write a better (i.e. non looping) way of doing this
     for j in range(0, image.shape[1]):
         for i in range(0, image.shape[0]):
             if(image[image.shape[0] - i - 1, j] < threshold):
                 continue
 
-            points[count, 0] = i*width_weight
-            points[count, 1] = j*height_weight
+            pos[count, 0] = i
+            pos[count, 1] = j
             alpha[count] = image[image.shape[0] - i - 1, j]
 
             count = count + 1
 
+    pos = indices2coords(pos, image.shape, pixel_size=torch.tensor([height_weight, width_weight]))
+
     if(centered):
-        points = points - torch.mean(points, dim=0)
+        pos = pos - torch.mean(pos, dim=0)
 
     if(normalise_weights):
         alpha = alpha/torch.sum(alpha)
 
-    return points, alpha
+    return pos, alpha
 
 
 def load_and_sample_greyscale(filename, threshold=0., centered=False, normalise_weights=True):

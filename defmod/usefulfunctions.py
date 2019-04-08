@@ -1,6 +1,9 @@
+from collections import Iterable
+
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
+from torchviz import make_dot
 
 
 class AABB:
@@ -61,6 +64,23 @@ class AABB:
     def area(self):
         return (self.__xmax - self.__xmin)*(self.ymax - self.ymin)
 
+    def squared(self):
+        self.__xmin = min(self.__xmin, self.__ymin)
+        self.__ymin = min(self.__xmin, self.__ymin)
+        self.__xmax = max(self.__xmax, self.__ymax)
+        self.__ymax = max(self.__xmax, self.__ymax)
+
+
+def flatten_tensor_list(l, out_list=[]):
+    """Very simple, recursive, list flattening functions that stops at the torch.Tensor (without unwrapping them). Should work well for lists that are not too much nested."""
+    for el in l:
+        if isinstance(el, Iterable) and not isinstance(el, torch.Tensor):
+            flatten_tensor_list(el, out_list)
+        else:
+            out_list.append(el)
+
+    return out_list
+
 
 def grid2vec(x, y):
     """Convert a grid of points (such as given by torch.meshgrid) to a tensor of vectors."""
@@ -72,17 +92,39 @@ def vec2grid(vec, nx, ny):
     return vec.t()[0].view(nx, ny).contiguous(), vec.t()[1].view(nx, ny).contiguous()
 
 
+def indices2coords(indices, shape, pixel_size=torch.tensor([1., 1.])):
+    # return torch.tensor([pixel_size[1]*indices[:, 1], pixel_size[0]*(shape[0] - indices[:, 0] - 1)])
+    return torch.cat([(pixel_size[0]*indices[:, 0]).view(-1, 1), (pixel_size[1]*(shape[1] - indices[:, 1] - 1)).view(-1, 1)], 1)
+
+
+def blocks_to_2d(M):
+    """Transforms a block matrix tensor (N x dim_block x dim_block) into a 2D square block matrix."""
+    N = int(np.sqrt(M.shape[0]))
+    assert N**2 == M.shape[0]
+    return torch.cat([torch.cat([M[i::N] for i in range(N)], dim=1).transpose(1, 2)[i] for i in range(N)])
+
+
+def rotation_matrix(theta):
+    return torch.tensor([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
+
+
 def plot_tensor_scatter(x, alpha=1., scale=64.):
     """Scatter plot points in the format: ([x, y], scale) or ([x, y]) (in that case you can specify scale)"""
     if(isinstance(x, tuple) or isinstance(x, list)):
-        #plt.scatter(x[0].detach().numpy()[:,1], x[0].detach().numpy()[:,0], s=50.*x[1].shape[0]*x[1].detach().numpy(), marker='o', alpha=alpha)
+        plt.scatter(x[0].detach().numpy()[:,1], x[0].detach().numpy()[:,0], s=50.*x[1].shape[0]*x[1].detach().numpy(), marker='o', alpha=alpha)
         plt.scatter(x[0].detach().numpy()[:,1], x[0].detach().numpy()[:,0], s=64.*x[1].shape[0]*x[1], marker='o', alpha=alpha)
     else:
         plt.scatter(x.detach().numpy()[:,1], x.detach().numpy()[:,0], s=scale, marker='o', alpha=alpha)
+
 
 def plot_grid(ax, gridx, gridy, **kwargs):
     for i in range(gridx.shape[0]):
         ax.plot(gridx[i,:], gridy[i,:], **kwargs)
     for i in range(gridx.shape[1]):
         ax.plot(gridx[:,i], gridy[:,i], **kwargs)
+
+
+def make_grad_graph(tensor, filename):
+    dot = make_dot(tensor)
+    dot.render(filename)
 
