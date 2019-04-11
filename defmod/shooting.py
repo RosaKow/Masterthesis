@@ -1,32 +1,93 @@
 import torch
 import numpy as np
 from torch.autograd import grad
-#from torchdiffeq import odeint_adjoint as odeint
+from .hamiltonian import Hamiltonian
+from torchdiffeq import odeint_adjoint
+from .usefulfunctions import make_grad_graph
 
 
-def shoot(gd, mom, h, n=10):
-    step = 1. / n
-    for i in range(n):
-        [d_gd, d_mom] = grad(h(gd, mom, h.geodesic_controls(gd, mom)), [gd, mom], create_graph=True)
-        gd = gd + step*d_mom
-        mom = mom - step*d_gd
-    return gd, mom
+
+def shoot_euler(h, it=10):
+    step = 1. / it
+
+    intermediate = [h.module.manifold.copy()]
+    for i in range(it):
+        h.geodesic_controls()
+        l = [*h.module.manifold.unroll_gd(), *h.module.manifold.unroll_cotan()]
+        delta = grad(h(), l, create_graph=True)
+        d_gd = h.module.manifold.roll_gd(list(delta[:int(len(delta)/2)]))
+        d_mom = h.module.manifold.roll_cotan(list(delta[int(len(delta)/2):]))
+        h.module.manifold.muladd_gd(d_mom, step)
+        h.module.manifold.muladd_cotan(d_gd, -step)
+        intermediate.append(h.module.manifold.copy())
+
+    return intermediate
 
 
-# def shootTorchdiffeq(GD, MOM, H):
-#     x = torch.cat([GD.view(1, -1), MOM.view(1, -1)])
-#     result = odeint(H, x, torch.linspace(0., 1., 100))
-#     return result[-1, 0, :], result[-1, 1, :]
+def shoot(h, it=2, method='rk4'):
+    # Wrapper class used by TorchDiffEq
+    # Returns (\partial H \over \partial p, -\partial H \over \partial q)
+    class TorchDiffEqHamiltonianGrad(Hamiltonian, torch.nn.Module):
+        def __init__(self, module):
+            super().__init__(module)
 
+        def __call__(self, t, x):
+            with torch.enable_grad():
+                gd, mom = [], []
+                index = 0
 
-# class deqH(Hamiltonian.Hamilt):
-#     def __init__(self, DefModule):
-#         super().__init__(DefModule)
-        
-#     def __call__(self, t, x):
-#         with torch.enable_grad():
-#             Cont = self.Cont_geo(x[0], x[1])
-#             a = super().__call__(x[0], x[1], Cont), [x[0], x[1]]
-#         print(a)
-#         return x
+                for m in self.module:
+                    for i in range(m.manifold.len_gd):
+                        gd.append(x[0][index:index+m.manifold.dim_gd[i]].requires_grad_())
+                        mom.append(x[1][index:index+m.manifold.dim_gd[i]].requires_grad_())
+                        index = index + m.manifold.dim_gd[i]
+
+                self.module.manifold.fill_gd(self.module.manifold.roll_gd(gd))
+                self.module.manifold.fill_cotan(self.module.manifold.roll_cotan(mom))
+
+                self.geodesic_controls()
+                delta = grad(super().__call__(),
+                             [*self.module.manifold.unroll_gd(),
+                              *self.module.manifold.unroll_cotan()],
+                             create_graph=True)
+
+                gd_out = delta[:int(len(delta)/2)]
+                mom_out = delta[int(len(delta)/2):]
+
+                return torch.cat(list(map(lambda x: x.view(-1), [*mom_out, *list(map(lambda x: -x, gd_out))])), dim=0).view(2, -1)
+
+    intermediate = [h.module.manifold.copy()]
+
+    x_0 = torch.cat(list(map(lambda x: x.view(-1), [*h.module.manifold.unroll_gd(), *h.module.manifold.unroll_cotan()])), dim=0).view(2, -1)
+    x_1 = odeint_adjoint(TorchDiffEqHamiltonianGrad.from_hamiltonian(h), x_0, torch.linspace(0., 1., it), method=method)
+
+    gd, mom = [], []
+    index = 0
+    for m in h.module:
+        for i in range(m.manifold.len_gd):
+            gd.append(x_1[-1, 0, index:index+m.manifold.dim_gd[i]])
+            mom.append(x_1[-1, 1, index:index+m.manifold.dim_gd[i]])
+            index = index + m.manifold.dim_gd[i]
+
+    h.module.manifold.fill_gd(h.module.manifold.roll_gd(gd))
+    h.module.manifold.fill_cotan(h.module.manifold.roll_cotan(mom))
+
+    # TODO: very very dirty, change this
+    for i in range(0, it):
+        gd, mom = [], []
+        index = 0
+        for m in h.module:
+            for j in range(m.manifold.len_gd):
+                gd.append(x_1[i, 0, index:index+m.manifold.dim_gd[j]])
+                mom.append(x_1[i, 1, index:index+m.manifold.dim_gd[j]])
+                index = index + m.manifold.dim_gd[j]
+
+        intermediate.append(intermediate[-1].copy())
+
+        intermediate[-1].roll_gd(gd)
+        intermediate[-1].roll_cotan(mom)
+        intermediate[-1].fill_gd(gd)
+        intermediate[-1].fill_cotan(mom)
+
+    return intermediate
 

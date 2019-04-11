@@ -1,38 +1,40 @@
+import copy
+from collections import Iterable
+
 import torch
 import numpy as np
 import torch.nn as nn
 from torch.autograd import grad
 
 from .kernels import scal
+from .usefulfunctions import make_grad_graph
+from .deformationmodules import CompoundModule
 
-class Hamiltonian(nn.Module):
-    def __init__(self, def_module):
+class Hamiltonian:
+    def __init__(self, modules):
+        assert isinstance(modules, Iterable) or isinstance(modules, CompoundModule)
         super().__init__()
-        self.__def_module = def_module
-        self.__init_controls = torch.zeros(def_module.dim_controls, requires_grad=True)
+        if isinstance(modules, Iterable):
+            self.__module = CompoundModule(modules)
+        else:
+            self.__module = modules
+
+    @classmethod
+    def from_hamiltonian(cls, class_instance):
+        return cls(class_instance.module)
 
     @property
-    def def_module(self):
-        return self.__def_module
+    def module(self):
+        return self.__module
 
-    @property
-    def init_controls(self):
-        return self.__init_controls
-
-    def __call__(self, gd, mom, controls):
+    def __call__(self):
         """Computes the hamiltonian."""
-        def_cost = self.__def_module.cost(gd, controls)
-        return self.apply_mom(gd, mom, controls) - def_cost
+        return self.apply_mom() - self.__module.cost()
 
-    def apply_mom(self, gd, mom, controls):
+    def apply_mom(self):
         """Apply the moment on the geodesic descriptors."""
-        speed = self.__def_module.action(gd, self.__def_module, gd, controls)
-        return scal(mom, speed)
+        return self.__module.manifold.inner_prod_module(self.__module)
 
-    # TODO: Find a better name for this function.
-    # TODO: Manualy compute the gradient so we can use the torchdifeq library for the shooting.
-    def geodesic_controls(self, gd, mom):
-        controls = grad(self.apply_mom(gd, mom, self.__init_controls),
-                        [self.__init_controls], create_graph=True)[0]
-        return self.__def_module.compute_geodesic_control(controls, gd)
+    def geodesic_controls(self):
+        self.__module.compute_geodesic_control(self.__module.manifold)
 
