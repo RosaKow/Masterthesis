@@ -14,6 +14,8 @@ def multipleCircles(origin, r, n):
     return [torch.tensor(circle1, requires_grad=True), torch.tensor(circle2, requires_grad=True)]
 
 def computeCenter(gd):
+    if len(gd.shape) == 1:
+            gd = gd.unsqueeze(0)
     return torch.mean(gd,0)
 
 def kronecker_I2(K):

@@ -44,7 +44,7 @@ def gradientdescent(energy, energygradient, X):
     while convergence == False:
         gradE = energygradient(gd, mom)    
         E = energy(gd, mom)
-        alpha = 0.01 #armijo(E, gradE, energy, [gd, mom])
+        alpha = 0.1 #armijo(E, gradE, energy, [gd, mom])
         momnew = mom - alpha*gradE[0]
         print(" iter : {}  ,total energy: {}".format(k, E))
         convergence = gill_murray_wright(E, energy(gd, momnew), gradE[0], [gd, mom], [gd, momnew], k)
