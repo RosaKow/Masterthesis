@@ -6,7 +6,7 @@ from kernels import K_xx, K_xy
 
 class MultiShapeModule(torch.nn.Module):
 
-    """ Input: List of modules (length n), the n+1 module is the background module; 
+    """ Input: List of modules (length n), the nth module is the background module; 
                constraints as a matrix """
     def __init__(self, module_list, Constr):
         super().__init__()

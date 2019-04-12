@@ -215,7 +215,64 @@ class CompoundModule(DeformationModule, Iterable):
 
     def field_generator(self):
         return CompoundStructuredField([m.field_generator() for m in self.__module_list])
+    
+    
+class Background(DeformationModule):
+    """ Creates the background module for the multishape framework"""
+    def __init__(self, module_list, sigma):
+        super().__init__()
+        self.__module_list = [*module_list]
+        self.__sigma = sigma
+        
+    @property
+    def module_list(self):
+        return self.__module_list
 
+    def __getitem__(self, index):
+        return self.__module_list[index]
+
+    def __iter__(self):
+        self.current = 0
+        return self
+
+    def __next__(self):
+        if self.current >= len(self.__module_list):
+            raise StopIteration
+        else:
+            self.current = self.current + 1
+            return self.__module_list[self.current - 1]
+
+    @property
+    def manifold(self):
+        return CompoundManifold([m.manifold for m in self.__module_list])
+        
+    ## check if this works        
+    def __call__(self, points):
+        vs = self.field_generator()
+        return vs(points)
+        
+            
+    ## check if this works    
+    def cost(self):
+        """Returns the cost."""
+        K_q = K_xx(self.manifold.gd.view(-1, self.__manifold.dim), self.__sigma)
+        m = torch.mm(K_q, self.controls.view(-1, self.__manifold.dim))
+        return 0.5*torch.dot(m.view(-1), self.__controls.view(-1))
+     
+        
+    ## check if this works    
+    def field_generator(self):
+        return manifold#.cot_to_vs(self.sigma)
+    
+    ## check if this works
+    def compute_geodesic_control(self, man):
+        self.__controls = manifold.cotan#.contiguous().view(-1)
+        
+        
+        
+        
+#######################################################################    
+## überarbeiten
 class GlobalTranslation(DeformationModule):
     ''' Global Translation Module for Multishapes
         Corresponds to a Translation Module where the translation is carried by the mean value of geometric descriptors'''
