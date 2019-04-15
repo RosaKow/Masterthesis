@@ -307,25 +307,22 @@ class TestCompoundManifold(unittest.TestCase):
         self.assertTrue(gradcheck(muladd_cotan, [cotan_mul0, cotan_mul1], raise_exception=False))
 
     def test_gradcheck_action(self):
-        def action(*tensors):
-            gd = tensors[:2]
-            controls = tensors[2:]
-            module0 = dm.deformationmodules.Translations.build_and_fill(2, self.nb_pts0, 1., gd=gd[0])
-            module0.fill_controls(controls[0])
-            module1 = dm.deformationmodules.Translations.build_and_fill(2, self.nb_pts1, 1., gd=gd[1])
-            module1.fill_controls(controls[1])
+        def action(gd0, gd1, controls0, controls1):
+            module0 = dm.deformationmodules.Translations.build_and_fill(2, self.nb_pts0, 1., gd=gd0)
+            module0.fill_controls(controls0)
+            module1 = dm.deformationmodules.Translations.build_and_fill(2, self.nb_pts1, 1., gd=gd1)
+            module1.fill_controls(controls1)
             
             man = self.compound.action(dm.deformationmodules.CompoundModule([module0, module1]))
-            return [*man.gd, *man.tan, *man.cotan]
+            return man.gd[0], man.gd[1], man.tan[0], man.tan[1], man.cotan[0], man.cotan[1]
 
-        gd = [self.gd0.requires_grad_(), self.gd1.requires_grad_()]
+        self.gd0.requires_grad_()
+        self.gd1.requires_grad_()
 
         controls0 = torch.rand_like(self.gd0, requires_grad=True)
         controls1 = torch.rand_like(self.gd1, requires_grad=True)
 
-        controls = [controls0, controls1]
-
-        self.assertTrue(gradcheck(action, [*gd, *controls], raise_exception=False))
+        self.assertTrue(gradcheck(action, [self.gd0, self.gd1, controls0, controls1], raise_exception=True))
 
     def test_gradcheck_inner_prod_module(self):
         def inner_prod_module(*tensors):

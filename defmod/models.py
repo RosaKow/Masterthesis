@@ -6,11 +6,12 @@ import torch.nn as nn
 import torch.optim
 import numpy as np
 import matplotlib.pyplot as plt
+import geomloss
 
 from .deformationmodules import SilentPoints, Translations, CompoundModule
 from .manifold import Landmarks
 from .hamiltonian import Hamiltonian
-from .shooting import shoot 
+from .shooting import shoot, shoot_euler
 from .usefulfunctions import AABB, grid2vec, vec2grid, make_grad_graph
 from .kernels import distances, scal
 from .sampling import sample_from_greyscale, sample_from_smoothed_points, resample_image_to_smoothed, deformed_intensities
@@ -38,9 +39,6 @@ class Model():
     def compute(self):
         raise NotImplementedError
 
-    def fidelity(self, target):
-        raise NotImplementedError
-
     def __call__(self, reverse=False):
         raise NotImplementedError
 
@@ -50,7 +48,7 @@ class Model():
     def fit(self, target, lr=1e-3, l=1., max_iter=100, tol=1e-7, log_interval=10):
         transformed_target = self.transform_target(target)
 
-        optimizer = torch.optim.SGD(self.parameters, lr=lr, momentum=0.05)
+        optimizer = torch.optim.LBFGS(self.parameters, lr=lr, max_iter=4)
         self.nit = -1
         self.break_loop = False
         costs = []
@@ -71,8 +69,6 @@ class Model():
             else:
                 cost.backward(retain_graph=True)
 
-            #make_grad_graph(cost, str("cost" + str(self.nit)))
-            
             return cost
 
         for i in range(0, max_iter):
@@ -86,7 +82,7 @@ class Model():
 
 
 class ModelCompound(Model):
-    def __init__(self, modules, fixed):
+    def __init__(self, modules, fixed, lossFunc=geomloss.SamplesLoss("sinkhorn", p=2)):
         super().__init__()
         self.__modules = modules
         self.__fixed = fixed
@@ -96,11 +92,11 @@ class ModelCompound(Model):
         self.__parameters = []
 
         for i in range(len(self.__modules)):
-            self.__parameters.append(self.__init_manifold[i].cotan)
+            self.__parameters.extend(self.__init_manifold[i].unroll_cotan())
             if(not self.__fixed[i]):
-                self.__parameters.append(self.__init_manifold[i].gd)
+                self.__parameters.extend(self.__init_manifold[i].unroll_gd())
 
-        self.__shot = False
+        self.loss = lossFunc
 
     @property
     def modules(self):
@@ -129,7 +125,6 @@ class ModelCompound(Model):
 
         gridpos = grid2vec(x, y)
 
-        
         grid_landmarks = Landmarks(2, gridpos.shape[0], gd=gridpos.view(-1))
         grid_silent = SilentPoints(grid_landmarks)
         compound = CompoundModule(self.modules)
@@ -153,25 +148,23 @@ class ModelCompoundWithPointsRegistration(ModelCompound):
         compound = CompoundModule(self.modules)
         compound.manifold.fill(self.init_manifold)
         h = Hamiltonian(compound)
-        shoot(h, it=2, method='rk4')
+        shoot_euler(h, it=10)
         self.__shot_points = compound[0].manifold.gd.view(-1, 2)
         self.shot_manifold = compound.manifold.copy()
         self.deformation_cost = compound.cost()
-        self.attach = self.fidelity(target)
-
-    def fidelity(self, target):
-        return fidelity((self.__shot_points, self.alpha), target)
+        self.attach = self.loss(self.__shot_points, target[0])
+        #self.attach = fidelity((self.__shot_points, self.alpha), target)
 
     def __call__(self):
         return self.__shot_points, self.alpha
 
 
 class ModelCompoundImageRegistration(ModelCompound):
-    def __init__(self, source_image, modules, fixed, img_transform=lambda x: x):
+    def __init__(self, source_image, modules, fixed, lossFunc, img_transform=lambda x: x):
         self.__frame_res = source_image.shape
         self.__source = sample_from_greyscale(source_image.clone(), 0., centered=False, normalise_weights=False, normalise_position=False)
         self.__img_transform = img_transform
-        super().__init__(modules, fixed)
+        super().__init__(modules, fixed, lossFunc)
 
     def transform_target(self, target):
         return self.__img_transform(target)
@@ -195,11 +188,8 @@ class ModelCompoundImageRegistration(ModelCompound):
         self.__output_image = deformed_intensities(compound[0].manifold.gd.view(-1, 2), self.__source[1].view(self.__frame_res)).clone()
 
         # Compute attach and deformation cost
-        self.attach = self.fidelity(target)
+        self.attach = self.loss(self.__output_image, target)
         self.deformation_cost = compound.cost()
-
-    def fidelity(self, target):
-        return L2_norm_fidelity(self.__output_image, target)
 
     def __call__(self):
         return self.__output_image

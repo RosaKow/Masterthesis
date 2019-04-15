@@ -66,7 +66,7 @@ class Translations(DeformationModule):
     controls = property(__get_controls, fill_controls)
 
     def fill_controls_zero(self):
-        self.__controls = torch.zeros(self.__dim_controls, requires_grad=True)
+        self.__controls = torch.zeros(self.__dim_controls)
 
     def __call__(self, points):
         """Applies the generated vector field on given points."""
@@ -76,7 +76,7 @@ class Translations(DeformationModule):
     def cost(self):
         """Returns the cost."""
         K_q = K_xx(self.manifold.gd.view(-1, self.__manifold.dim), self.__sigma)
-        m = torch.mm(K_q, self.controls.view(-1, self.__manifold.dim))
+        m = torch.mm(K_q, self.__controls.view(-1, self.__manifold.dim))
         return 0.5*torch.dot(m.view(-1), self.__controls.view(-1))
 
     def compute_geodesic_control(self, man):
@@ -206,10 +206,10 @@ class CompoundModule(DeformationModule, Iterable):
 
         return sum(cost_list)
 
-    def compute_geodesic_control(self, vs):
+    def compute_geodesic_control(self, man):
         """Computes geodesic control from \delta \in H^\ast."""
         for i in range(self.nb_module):
-            self.__module_list[i].compute_geodesic_control(vs)
+            self.__module_list[i].compute_geodesic_control(man)
 
     def field_generator(self):
         return CompoundStructuredField([m.field_generator() for m in self.__module_list])
