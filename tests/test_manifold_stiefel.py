@@ -33,10 +33,13 @@ class TestStiefel(unittest.TestCase):
         self.assertEqual(stiefel.len_gd, 2)
         self.assertEqual(stiefel.dim_gd, (self.nb_pts * self.dim, self.nb_pts * self.dim * self.dim))
 
-        self.assertEqual(stiefel.gd, self.gd)
-        self.assertEqual(stiefel.tan, self.tan)
-        self.assertEqual(stiefel.cotan, self.cotan)
-
+        self.assertTrue(torch.all(torch.eq(stiefel.gd[0], self.gd[0])))
+        self.assertTrue(torch.all(torch.eq(stiefel.gd[1], self.gd[1])))
+        self.assertTrue(torch.all(torch.eq(stiefel.tan[0], self.tan[0])))
+        self.assertTrue(torch.all(torch.eq(stiefel.tan[1], self.tan[1])))
+        self.assertTrue(torch.all(torch.eq(stiefel.cotan[0], self.cotan[0])))
+        self.assertTrue(torch.all(torch.eq(stiefel.cotan[1], self.cotan[1])))
+        
         self.assertIsInstance(stiefel.unroll_gd(), Iterable)
         self.assertIsInstance(stiefel.unroll_tan(), Iterable)
         self.assertIsInstance(stiefel.unroll_cotan(), Iterable)
@@ -45,14 +48,24 @@ class TestStiefel(unittest.TestCase):
         l_tan = stiefel.unroll_tan()
         l_cotan = stiefel.unroll_cotan()
 
-        self.assertEqual(l_gd, list(self.gd))
-        self.assertEqual(l_tan, list(self.tan))
-        self.assertEqual(l_cotan, list(self.cotan))
+        self.assertTrue(torch.all(torch.eq(l_gd[0], self.gd[0])))
+        self.assertTrue(torch.all(torch.eq(l_gd[1], self.gd[1])))
+        self.assertTrue(torch.all(torch.eq(l_tan[0], self.tan[0])))
+        self.assertTrue(torch.all(torch.eq(l_tan[1], self.tan[1])))
+        self.assertTrue(torch.all(torch.eq(l_cotan[0], self.cotan[0])))
+        self.assertTrue(torch.all(torch.eq(l_cotan[1], self.cotan[1])))
 
-        self.assertEqual(stiefel.roll_gd(l_gd), list(self.gd))
-        self.assertEqual(stiefel.roll_gd(l_tan), list(self.tan))
-        self.assertEqual(stiefel.roll_gd(l_cotan), list(self.cotan))
-        
+        l_rolled_gd = stiefel.roll_gd(l_gd)
+        l_rolled_tan = stiefel.roll_tan(l_tan)
+        l_rolled_cotan = stiefel.roll_cotan(l_cotan)
+
+        self.assertTrue(torch.all(torch.eq(l_rolled_gd[0], self.gd[0])))
+        self.assertTrue(torch.all(torch.eq(l_rolled_gd[1], self.gd[1])))
+        self.assertTrue(torch.all(torch.eq(l_rolled_tan[0], self.tan[0])))
+        self.assertTrue(torch.all(torch.eq(l_rolled_tan[1], self.tan[1])))
+        self.assertTrue(torch.all(torch.eq(l_rolled_cotan[0], self.cotan[0])))
+        self.assertTrue(torch.all(torch.eq(l_rolled_cotan[1], self.cotan[1])))
+
     def test_fill(self):
         stiefel = dm.manifold.Stiefel(self.dim, self.nb_pts)
 

@@ -41,7 +41,7 @@ class TestKernels(unittest.TestCase):
         m = 10
         x = torch.rand(m, 2)
 
-        kxx_matrix = dm.kernels.K_xx(x)
+        kxx_matrix = dm.kernels.K_xx(x, 1.)
         self.assertIsInstance(kxx_matrix, torch.Tensor)
         self.assertEqual(kxx_matrix.shape, torch.Size([m, m]))
 
@@ -51,6 +51,6 @@ class TestKernels(unittest.TestCase):
         x = torch.rand(m, 2)
         y = torch.rand(n, 2)
 
-        kxy_matrix = dm.kernels.K_xy(x, y)
+        kxy_matrix = dm.kernels.K_xy(x, y, 1.)
         self.assertIsInstance(kxy_matrix, torch.Tensor)
         self.assertEqual(kxy_matrix.shape, torch.Size([m, n]))

@@ -56,10 +56,12 @@ def shoot(h, it=2, method='rk4'):
 
                 return torch.cat(list(map(lambda x: x.view(-1), [*mom_out, *list(map(lambda x: -x, gd_out))])), dim=0).view(2, -1)
 
-    intermediate = [h.module.manifold.copy()]
+    #intermediate = [h.module.manifold.copy()]
+    init_manifold = h.module.manifold.copy()
+    intermediate = []
 
     x_0 = torch.cat(list(map(lambda x: x.view(-1), [*h.module.manifold.unroll_gd(), *h.module.manifold.unroll_cotan()])), dim=0).view(2, -1)
-    x_1 = odeint_adjoint(TorchDiffEqHamiltonianGrad.from_hamiltonian(h), x_0, torch.linspace(0., 1., it), method=method)
+    x_1 = odeint_adjoint(TorchDiffEqHamiltonianGrad.from_hamiltonian(h), x_0, torch.linspace(0., 1., it+1), method=method)
 
     gd, mom = [], []
     index = 0
@@ -82,7 +84,7 @@ def shoot(h, it=2, method='rk4'):
                 mom.append(x_1[i, 1, index:index+m.manifold.dim_gd[j]])
                 index = index + m.manifold.dim_gd[j]
 
-        intermediate.append(intermediate[-1].copy())
+        intermediate.append(init_manifold.copy())
 
         intermediate[-1].roll_gd(gd)
         intermediate[-1].roll_cotan(mom)

@@ -1,7 +1,7 @@
 from collections import Iterable
+import math
 
 import torch
-import numpy as np
 import matplotlib.pyplot as plt
 from torchviz import make_dot
 
@@ -98,14 +98,21 @@ def indices2coords(indices, shape, pixel_size=torch.tensor([1., 1.])):
 
 
 def blocks_to_2d(M):
-    """Transforms a block matrix tensor (N x dim_block x dim_block) into a 2D square block matrix."""
-    N = int(np.sqrt(M.shape[0]))
+    """Transforms a block matrix tensor (N x dim_block x dim_block) into a 2D square block matrix of size (N * dim_block x N * dim_block)."""
+    N = int(math.sqrt(M.shape[0]))
     assert N**2 == M.shape[0]
-    return torch.cat([torch.cat([M[i::N] for i in range(N)], dim=1).transpose(1, 2)[i] for i in range(N)])
+    return torch.cat([torch.cat([M.transpose(1, 2)[i::N] for i in range(N)], dim=1).transpose(1, 2)[i] for i in range(N)])
 
 
-def rotation_matrix(theta):
-    return torch.tensor([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
+def blocks_to_2d_fast(M):
+    a = torch.arange(M.numel()).view_as(M)
+    indices = blocks_to_2d(a).view(-1)
+    return torch.take(M, indices).view(int(math.sqrt(M.shape[0])*M.shape[1]), int(math.sqrt(M.shape[0])*M.shape[2]))
+
+
+def rot2d(theta):
+    """ Returns a 2D rotation matrix. """
+    return torch.tensor([[math.cos(theta), -math.sin(theta)], [math.sin(theta), math.cos(theta)]])
 
 
 def plot_tensor_scatter(x, alpha=1., scale=64.):

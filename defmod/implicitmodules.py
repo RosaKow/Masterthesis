@@ -16,12 +16,12 @@ class ImplicitModule0(DeformationModule):
         self.__nu = nu
         self.__coeff = coeff
         self.__dim_controls = self.__manifold.dim*self.__manifold.nb_pts
-        self.__controls = torch.zeros(self.__dim_controls, requires_grad=True)
+        self.__controls = torch.zeros(self.__dim_controls)
 
     @classmethod
-    def build_and_fill(cls, dim, nb_pts, sigma, gd=None, tan=None, cotan=None):
+    def build_and_fill(cls, dim, nb_pts, sigma, nu, coeff=1., gd=None, tan=None, cotan=None):
         """Builds the Translations deformation module from tensors."""
-        return cls(Landmarks(dim, nb_pts, gd=gd, tan=tan, cotan=cotan), sigma)
+        return cls(Landmarks(dim, nb_pts, gd=gd, tan=tan, cotan=cotan), sigma, nu, coeff)
 
     @property
     def manifold(self):
@@ -62,19 +62,19 @@ class ImplicitModule0(DeformationModule):
     def cost(self):
         """Returns the cost."""
         K_q = K_xx(self.manifold.gd.view(-1, self.__manifold.dim), self.__sigma)
-        m = torch.mm(self.__controls.view(self.__manifold.dim, -1), K_q + self.__nu*torch.eye(self.__manifold.nb_pts))
+        m = torch.mm(K_q + self.__nu*torch.eye(self.__manifold.nb_pts), self.__controls.view(-1, self.__manifold.dim))
         return 0.5*torch.dot(m.view(-1), self.__controls.view(-1))
 
     def compute_geodesic_control(self, man):
         """Computes geodesic control from \delta \in H^\ast."""
         vs = self.adjoint(man)
-        K_q = K_xx(self.manifold.gd.view(-1, self.__manifold.dim), self.__sigma)
+        K_q = K_xx(self.manifold.gd.view(-1, self.__manifold.dim), self.__sigma) + self.__nu*torch.eye(self.__manifold.nb_pts)
         controls, _ = torch.gesv(vs(self.manifold.gd.view(-1, self.manifold.dim)), K_q)
-        self.controls = controls.contiguous().view(-1) / self.__coeff
+        self.__controls = controls.contiguous().view(-1) / self.__coeff
 
     def field_generator(self):
         return StructuredField_0(self.__manifold.gd.view(-1, self.__manifold.dim),
-                                 self.__manifold.cotan.view(-1, self.__manifold.dim), self.__sigma)
+                                 self.__controls.view(-1, self.__manifold.dim), self.__sigma)
 
     def adjoint(self, manifold):
         return manifold.cot_to_vs(self.__sigma)
@@ -129,7 +129,7 @@ class ImplicitModule1(DeformationModule):
     controls = property(__get_controls, fill_controls)
 
     def fill_controls_zero(self):
-        self.fill_controls(torch.zeros(self.__dim_controls, requires_grad=True))
+        self.fill_controls(torch.zeros(self.__dim_controls))
 
     def __call__(self, points, k=0):
         """Applies the generated vector field on given points."""
@@ -167,12 +167,11 @@ class ImplicitModule1(DeformationModule):
         R = self.__manifold.gd[1].view(-1, 2, 2)
 
         return torch.einsum('nli, nik, k, nui, niv, lvt->nt', R, self.__C, h, torch.eye(self.__manifold.dim).repeat(self.__manifold.nb_pts, 1, 1), torch.transpose(R, 1, 2), eta())
-
         # TODO: Remove this loop
-        # return torch.stack([torch.tensordot(torch.mm(R[i], torch.mm(torch.diag(torch.tensordot(self.__C[i], h, dims=1)), R[i].t())), eta(), dims=2) for i in range(self.__manifold.nb_pts)])
+        #return torch.stack([torch.tensordot(torch.mm(R[i], torch.mm(torch.diag(torch.tensordot(self.__C[i], h, dims=1)), R[i].t())), eta(), dims=2) for i in range(self.__manifold.nb_pts)])
 
     def __compute_sks(self):
-        self.__sks = compute_sks(self.manifold.gd[0].view(-1, self.__manifold.dim), self.sigma, 1) + self.nu * torch.eye(3 * self.manifold.nb_pts)
+        self.__sks = compute_sks(self.__manifold.gd[0].view(-1, self.__manifold.dim), self.sigma, 1) + self.__nu * torch.eye(3 * self.__manifold.nb_pts)
 
     def __compute_moments(self):
         self.__aqh = self.__compute_aqh(self.__controls)

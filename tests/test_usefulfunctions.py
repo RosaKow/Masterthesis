@@ -104,3 +104,21 @@ class TestUsefulFunctions(unittest.TestCase):
         self.assertIsInstance(coords, torch.Tensor)
         self.assertEqual(coords.shape, indices.shape)
 
+    def test_blocks_to_2d(self):
+        M = torch.arange(4).view(4, 1, 1)
+        M_ = torch.tensor([[0, 1], [2, 3]])
+        self.assertTrue(torch.all(torch.eq(dm.usefulfunctions.blocks_to_2d(M), M_)))
+
+        M = torch.arange(16).view(4, 2, 2)
+        M_ = torch.tensor([[0, 1, 4, 5], [2, 3, 6, 7], [8, 9, 12, 13], [10, 11, 14, 15]])
+        self.assertTrue(torch.all(torch.eq(dm.usefulfunctions.blocks_to_2d(M), M_)))
+
+    def test_blocks_to_2d_fast(self):
+        M = torch.arange(4).view(4, 1, 1)
+        M_ = torch.tensor([[0, 1], [2, 3]])
+        self.assertTrue(torch.all(torch.eq(dm.usefulfunctions.blocks_to_2d_fast(M), M_)))
+
+        M = torch.arange(16).view(4, 2, 2)
+        M_ = torch.tensor([[0, 1, 4, 5], [2, 3, 6, 7], [8, 9, 12, 13], [10, 11, 14, 15]])
+        self.assertTrue(torch.all(torch.eq(dm.usefulfunctions.blocks_to_2d_fast(M), M_)))
+
