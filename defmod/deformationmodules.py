@@ -9,6 +9,7 @@ from .kernels import gauss_kernel, K_xx, K_xy, compute_sks
 from .manifold import Landmarks, CompoundManifold
 from .usefulfunctions import make_grad_graph
 
+
 class DeformationModule:
     """Abstract module."""
     def __init__(self):
