@@ -8,6 +8,7 @@ from . import implicitmodules
 from . import manifold
 from . import kernels
 from . import structuredfield
+from . import multishape
 
 __version__ = "0.0.2"
 

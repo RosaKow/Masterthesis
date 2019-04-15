@@ -1,7 +1,9 @@
+from collections import Iterable
+
 import torch
 import numpy as np
 
-from kernels import K_xx, K_xy
+from .kernels import K_xx, K_xy
 
 class MultiShapeModule(torch.nn.Module, Iterable):
     """ Input: List of modules, 
@@ -85,10 +87,10 @@ class MultiShapeModule(torch.nn.Module, Iterable):
             
         return sum(app_list).view(-1, self.manifold.dim)
     
-    
+    ## 
     def compute_geodesic_control(self, manifold, l ):        
         for m in self.__module_list:            
-            manifold.cotan = manifold.cotan - 'Cq \lambda'
+            manifold.cotan = manifold.cotan #- 'Cq \lambda'
             self.__controls = m.compute_geodesic_control(manifold)
             
             

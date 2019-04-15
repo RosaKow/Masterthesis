@@ -34,7 +34,7 @@ class DeformationModule:
 class Translations(DeformationModule):
     """Module generating sum of translations."""
     def __init__(self, manifold, sigma):
-        assert isinstance(manifold, Landmarks)
+        #assert isinstance(manifold, Landmarks)
         super().__init__()
         self.__manifold = manifold
         self.__sigma = sigma
@@ -90,7 +90,7 @@ class Translations(DeformationModule):
 
     def field_generator(self):
         return StructuredField_0(self.__manifold.gd.view(-1, self.__manifold.dim),
-                                 self.__controls, self.__sigma)
+                                 self.__controls.view(-1, self.__manifold.dim), self.__sigma)
 
     def adjoint(self, manifold):
         return manifold.cot_to_vs(self.__sigma)
@@ -228,94 +228,109 @@ class Background(DeformationModule):
     def module_list(self):
         return self.__module_list
 
-    def __getitem__(self, index):
-        return self.__module_list[index]
-
-    def __iter__(self):
-        self.current = 0
-        return self
-
-    def __next__(self):
-        if self.current >= len(self.__module_list):
-            raise StopIteration
-        else:
-            self.current = self.current + 1
-            return self.__module_list[self.current - 1]
-
     @property
     def manifold(self):
         return CompoundManifold([m.manifold for m in self.__module_list])
-        
-    ## check if this works        
-    def __call__(self, points):
-        vs = self.field_generator()
-        return vs(points)
-        
-            
-    ## check if this works    
-    def cost(self):
-        """Returns the cost."""
-        K_q = K_xx(self.manifold.gd.view(-1, self.__manifold.dim), self.__sigma)
-        m = torch.mm(K_q, self.controls.view(-1, self.__manifold.dim))
-        return 0.5*torch.dot(m.view(-1), self.__controls.view(-1))
-     
-        
-    ## check if this works    
-    def field_generator(self):
-        return manifold#.cot_to_vs(self.sigma)
-    
-    ## check if this works
-    def compute_geodesic_control(self, man):
-        self.__controls = manifold.cotan#.contiguous().view(-1)
-        
-        
-        
-        
-#######################################################################    
-## überarbeiten
-class GlobalTranslation(DeformationModule):
-    ''' Global Translation Module for Multishapes
-        Corresponds to a Translation Module where the translation is carried by the mean value of geometric descriptors'''
-    def __init__(self, dim, nb_pts, sigma):
-        super().__init__()
-        self.__sigma = sigma
-        self.__dim = dim
-        self.__translationmodule = Translations(dim, 1, sigma)
-        self.__dim_gd = dim*nb_pts
-        self.__dim_controls = dim
-        self.__nb_pts = nb_pts
-        
-    @property
-    def dim_gd(self):
-        return self.__dim_gd
     
     @property
     def dim_controls(self):
-        return self.__dim_controls
+        return sum([mod.dim_controls for mod in self.__module_list])
+    
+    @property 
+    def dim(self):
+        return self.__module_list[0].manifold.dim
+
+    def __get_controls(self):
+        return self.__controls
+
+    def fill_controls(self, controls):
+        self.__controls = controls
+
+    controls = property(__get_controls, fill_controls)
+    
+    def fill_controls_zero(self):
+        self.__controls = torch.zeros(self.__dim_controls, requires_grad=True)
+        
+    def __call__(self, points):
+        vs = self.field_generator()
+        return vs(points)
+              
+    def cost(self):
+        """Returns the cost."""
+        cost = 0
+        for gd,cont in zip(self.manifold.gd, self.controls):
+            K_q = K_xx(gd.view(-1, self.dim), self.__sigma)
+            m = torch.mm(K_q, cont.view(-1, self.dim))
+            cost = cost + 0.5*torch.dot(m.view(-1), cont.view(-1))
+        return cost
+     
+        
+    def field_generator(self):
+        return self.manifold.cot_to_vs(self.__sigma)
+    
+    
+    def compute_geodesic_control(self, man):
+        self.__controls = man.cotan
+        
+        
+        
+        
+class GlobalTranslation(DeformationModule):
+    ''' Global Translation Module for Multishapes
+        Corresponds to a Translation Module where the translation is carried by the mean value of geometric descriptors'''
+    def __init__(self, manifold, sigma):
+        super().__init__()
+        self.__sigma = sigma
+        self.__dim = manifold.dim
+        self.__manifold = manifold
+        self.__manifold_trans = Landmarks(manifold.dim, 1)
+        self.__translationmodule = Translations(self.__manifold_trans, sigma)
+   
+    @property
+    def manifold(self):
+        return self.__manifold
+
+    @property
+    def sigma(self):
+        return self.__sigma
     
     @property
-    def nb_pts(self):
-        return self.__nb_pts
+    def dim_controls(self):
+        return self.manifold.dim
 
+    def __get_controls(self):
+        return self.__controls
+
+    def fill_controls(self, controls):
+        self.__controls = controls
+        self.__translationmodule.fill_controls(controls)
+
+    controls = property(__get_controls, fill_controls)
     
-    def __call__(self, gd, control, points) :
+    def fill_controls_zero(self):
+        self.__controls = torch.zeros(self.dim_controls, requires_grad=True)
+        self.__translationmodule.fill_controls_zero()
+        
+    
+    def __call__(self, points) :
         """Applies the generated vector field on given points."""
-        return self.__translationmodule(self.z(gd), control, points)
+        return self.__translationmodule(points)
     
-    def z(self, gd):
+    def z(self):
         ''' Computes the center (mean) of gd'''
+        gd = self.manifold.gd
         if len(gd.shape) == 1:
             gd = gd.unsqueeze(0)
-        return torch.mean(gd,0).view(1,self.__dim)
-    
-    def action(self, gd, module, gd_module, controls_module) :
-        """Applies the vector field generated by Mod on GeoDesc."""
-        return module(gd_module, controls_module, gd)
+        return torch.mean(gd.view(-1,self.manifold.dim),0).view(1,self.manifold.dim)
 
-    def cost(self, gd, control) :
+    def cost(self) :
         """Returns the cost."""
-        return self.__translationmodule.cost(self.z(gd), control)
+        return self.__translationmodule.cost()
 
-    def compute_geodesic_control(self, delta, gd):
-        """Computes geodesic control from \delta \in H^\ast."""
-        return self.__translationmodule.compute_geodesic_control(self, delta, self.z(gd)) 
+    def compute_geodesic_control(self, man):
+        """Computes geodesic control from StructuredField."""
+        self.__translationmodule.compute_geodesic_control(man) 
+        self.__controls = self.__translationmodule.controls
+
+    def field_generator(self):
+        return self.__translationmodule.field_generator()
