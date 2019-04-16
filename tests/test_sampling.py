@@ -87,7 +87,7 @@ class TestSampling(unittest.TestCase):
         pos = dm.usefulfunctions.grid2vec(x, y)
 
         def kernel(x, sigma):
-            return np.exp(-x**2/sigma**2)
+            return np.exp(-0.5*x**2/sigma**2)
 
         naive = torch.zeros(pos.shape[0])
         for i in range(0, pos.shape[0]):
