@@ -110,9 +110,17 @@ def blocks_to_2d_fast(M):
     return torch.take(M, indices).view(int(math.sqrt(M.shape[0])*M.shape[1]), int(math.sqrt(M.shape[0])*M.shape[2]))
 
 
+def kronecker(m1, m2):
+    return torch.ger(m1.view(-1), m2.view(-1)).reshape(*(m1.size() + m2.size())).permute([0, 2, 1, 3]).reshape(m1.size(0) * m2.size(0), m1.size(1) * m2.size(1))
+
+
 def rot2d(theta):
     """ Returns a 2D rotation matrix. """
     return torch.tensor([[math.cos(theta), -math.sin(theta)], [math.sin(theta), math.cos(theta)]])
+
+
+def close_shape(x):
+    return torch.cat([x, x[0, :].view(1, -1)], dim=0)
 
 
 def plot_tensor_scatter(x, alpha=1., scale=64.):
