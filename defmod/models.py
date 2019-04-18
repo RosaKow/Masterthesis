@@ -60,8 +60,12 @@ def cost_varifold(x, y, sigma):
 
 
 class Model():
-    def __init__(self):
-        super().__init__()
+    def __init__(self, attachement):
+        self.__attachement = attachement
+
+    @property
+    def attachement(self):
+        return self.__attachement
 
     def compute(self):
         raise NotImplementedError
@@ -109,8 +113,8 @@ class Model():
 
 
 class ModelCompound(Model):
-    def __init__(self, modules, fixed, lossFunc=geomloss.SamplesLoss("energy", p=2)):
-        super().__init__()
+    def __init__(self, modules, fixed, attachement):
+        super().__init__(attachement)
         self.__modules = modules
         self.__fixed = fixed
 
@@ -122,8 +126,6 @@ class ModelCompound(Model):
             self.__parameters.extend(self.__init_manifold[i].unroll_cotan())
             if(not self.__fixed[i]):
                 self.__parameters.extend(self.__init_manifold[i].unroll_gd())
-
-        self.loss = lossFunc
 
     @property
     def modules(self):
@@ -163,25 +165,25 @@ class ModelCompound(Model):
 
 
 class ModelCompoundWithPointsRegistration(ModelCompound):
-    def __init__(self, source, module_list, fixed):
+    def __init__(self, source, module_list, fixed, attachement):
         self.alpha = source[1]
 
         module_list.insert(0, SilentPoints(Landmarks(2, source[0].shape[0], gd=source[0].view(-1).requires_grad_())))
         fixed.insert(0, True)
 
-        super().__init__(module_list, fixed)
+        super().__init__(module_list, fixed, attachement)
 
     def compute(self, target):
         compound = CompoundModule(self.modules)
         compound.manifold.fill(self.init_manifold)
         h = Hamiltonian(compound)
-        #shoot(h, it=4)
         shoot(h, it=10, method='midpoint')
         self.__shot_points = compound[0].manifold.gd.view(-1, 2)
         self.shot_manifold = compound.manifold.copy()
         self.deformation_cost = compound.cost()
+        self.attach = self.attachement((self.__shot_points, self.alpha), target)
         #self.attach = self.loss(self.__shot_points, target[0])
-        self.attach = cost_varifold(self.__shot_points, target[0], 10.) + cost_varifold(self.__shot_points, target[0], 50.)
+        #self.attach = cost_varifold(self.__shot_points, target[0], 10.) + cost_varifold(self.__shot_points, target[0], 50.)
         #self.attach = fidelity((self.__shot_points, self.alpha), target)
 
     def __call__(self):
