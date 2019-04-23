@@ -436,6 +436,7 @@ class CompoundManifold(Manifold):
     def fill_cotan(self, cotan, copy=False):
         for i in range(len(self.__manifold_list)):
             self.__manifold_list[i].fill_cotan(cotan[i], copy=copy)
+           
 
     gd = property(__get_gd, fill_gd)
     tan = property(__get_tan, fill_tan)
@@ -471,10 +472,11 @@ class CompoundManifold(Manifold):
     def inner_prod_module(self, module):
         return sum([m.inner_prod_module(module) for m in self.__manifold_list])
 
-    def action(self, vs):
+    def action(self, module):
+        
         actions = []
         for m in self.__manifold_list:
-            actions.append(m.action(vs))
+            actions.append(m.action(module))
 
         return CompoundManifold(actions)
 
