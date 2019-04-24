@@ -63,7 +63,7 @@ class ImplicitModule0(DeformationModule):
         """Returns the cost."""
         K_q = K_xx(self.manifold.gd.view(-1, self.__manifold.dim), self.__sigma)
         m = torch.mm(K_q + self.__nu*torch.eye(self.__manifold.nb_pts), self.__controls.view(-1, self.__manifold.dim))
-        return 0.5*torch.dot(m.view(-1), self.__controls.view(-1))
+        return 0.5 * self.__coeff * torch.dot(m.view(-1), self.__controls.view(-1))
 
     def compute_geodesic_control(self, man):
         """Computes geodesic control from \delta \in H^\ast."""
@@ -91,7 +91,7 @@ class ImplicitModule1(DeformationModule):
         self.__nu = nu
         self.__coeff = coeff
         self.__dim_controls = C.shape[2]
-        self.__controls = torch.zeros(self.__dim_controls, requires_grad=True)
+        self.__controls = torch.zeros(self.__dim_controls)
 
     @classmethod
     def build_and_fill(cls, dim, nb_pts, sigma, nu, gd=None, tan=None, cotan=None):
@@ -184,7 +184,7 @@ class ImplicitModule1(DeformationModule):
         aq = torch.zeros(3 * self.__manifold.nb_pts, self.__dim_controls)
         for i in range(self.__dim_controls):
             h = torch.zeros(self.__dim_controls)
-            h[i] = 1
+            h[i] = 1.
             aq[:, i] = self.__compute_aqh(h).view(-1)
             l, _ = torch.gesv(aq[:, i].view(-1, 1), self.__sks)
             lambdas[i, :] = l.view(-1)

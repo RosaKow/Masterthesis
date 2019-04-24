@@ -8,6 +8,7 @@ from . import implicitmodules
 from . import manifold
 from . import kernels
 from . import structuredfield
+from . import attachement
 
 #from . import multimodule_structuredfield
 from . import multishape

@@ -12,7 +12,7 @@ from .deformationmodules import SilentPoints, Translations, CompoundModule
 from .manifold import Landmarks
 from .hamiltonian import Hamiltonian
 from .shooting import shoot, shoot_euler
-from .usefulfunctions import AABB, grid2vec, vec2grid, make_grad_graph
+from .usefulfunctions import AABB, grid2vec, vec2grid, make_grad_graph, close_shape
 from .kernels import distances, scal
 from .sampling import sample_from_greyscale, sample_from_smoothed_points, resample_image_to_smoothed, deformed_intensities
 
@@ -32,9 +32,40 @@ def L2_norm_fidelity(a, b):
     return torch.dist(a, b)
 
 
+def cost_varifold(x, y, sigma):
+    def dot_varifold(x, y, sigma):
+        cx, cy = close_shape(x), close_shape(y)
+        nx, ny = x.shape[0], y.shape[0]
+
+        vx, vy = cx[1:nx + 1, :] - x, cy[1:ny + 1, :] - y
+        mx, my = (cx[1:nx + 1, :] + x) / 2, (cy[1:ny + 1, :] + y) / 2
+
+        xy = torch.tensordot(torch.transpose(torch.tensordot(mx, my, dims=0), 1, 2), torch.eye(2))
+
+        d2 = torch.sum(mx * mx, dim=1).reshape(nx, 1).repeat(1, ny) + torch.sum(my * my, dim=1).repeat(nx, 1) - 2 * xy
+
+        kxy = torch.exp(-d2 / (2 * sigma ** 2))
+
+        vxvy = torch.tensordot(torch.transpose(torch.tensordot(vx, vy, dims=0), 1, 2), torch.eye(2)) ** 2
+
+        nvx = torch.sqrt(torch.sum(vx * vx, dim=1))
+        nvy = torch.sqrt(torch.sum(vy * vy, dim=1))
+
+        mask = vxvy > 0
+
+        cost = torch.sum(kxy[mask] * vxvy[mask] / (torch.tensordot(nvx, nvy, dims=0)[mask]))
+        return cost
+
+    return dot_varifold(x, x, sigma) + dot_varifold(y, y, sigma) - 2 * dot_varifold(x, y, sigma)
+
+
 class Model():
-    def __init__(self):
-        super().__init__()
+    def __init__(self, attachement):
+        self.__attachement = attachement
+
+    @property
+    def attachement(self):
+        return self.__attachement
 
     def compute(self):
         raise NotImplementedError
@@ -82,8 +113,8 @@ class Model():
 
 
 class ModelCompound(Model):
-    def __init__(self, modules, fixed, lossFunc=geomloss.SamplesLoss("sinkhorn", p=2)):
-        super().__init__()
+    def __init__(self, modules, fixed, attachement):
+        super().__init__(attachement)
         self.__modules = modules
         self.__fixed = fixed
 
@@ -95,8 +126,6 @@ class ModelCompound(Model):
             self.__parameters.extend(self.__init_manifold[i].unroll_cotan())
             if(not self.__fixed[i]):
                 self.__parameters.extend(self.__init_manifold[i].unroll_gd())
-
-        self.loss = lossFunc
 
     @property
     def modules(self):
@@ -136,23 +165,25 @@ class ModelCompound(Model):
 
 
 class ModelCompoundWithPointsRegistration(ModelCompound):
-    def __init__(self, source, module_list, fixed):
+    def __init__(self, source, module_list, fixed, attachement):
         self.alpha = source[1]
 
         module_list.insert(0, SilentPoints(Landmarks(2, source[0].shape[0], gd=source[0].view(-1).requires_grad_())))
         fixed.insert(0, True)
 
-        super().__init__(module_list, fixed)
+        super().__init__(module_list, fixed, attachement)
 
     def compute(self, target):
         compound = CompoundModule(self.modules)
         compound.manifold.fill(self.init_manifold)
         h = Hamiltonian(compound)
-        shoot_euler(h, it=10)
+        shoot(h, it=10, method='midpoint')
         self.__shot_points = compound[0].manifold.gd.view(-1, 2)
         self.shot_manifold = compound.manifold.copy()
         self.deformation_cost = compound.cost()
-        self.attach = self.loss(self.__shot_points, target[0])
+        self.attach = self.attachement((self.__shot_points, self.alpha), target)
+        #self.attach = self.loss(self.__shot_points, target[0])
+        #self.attach = cost_varifold(self.__shot_points, target[0], 10.) + cost_varifold(self.__shot_points, target[0], 50.)
         #self.attach = fidelity((self.__shot_points, self.alpha), target)
 
     def __call__(self):

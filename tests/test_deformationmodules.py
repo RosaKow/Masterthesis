@@ -90,6 +90,15 @@ class TestTranslations2D(unittest.TestCase):
 
         self.assertTrue(torch.autograd.gradcheck(compute_geodesic_control, (100.*self.gd, self.mom), raise_exception=False))
 
+    def test_hamiltonian_control_grad_zero(self):
+        self.trans.fill_controls(torch.zeros_like(self.trans.controls, requires_grad=True))
+        h = dm.hamiltonian.Hamiltonian([self.trans])
+        h.geodesic_controls()
+
+        [d_controls] = torch.autograd.grad(h(), [self.trans.controls])
+
+        self.assertTrue(torch.allclose(d_controls, torch.zeros_like(d_controls)))
+
 
 class TestSilentPoints2D(unittest.TestCase):
     def setUp(self):
@@ -265,4 +274,13 @@ class CompoundTest2D(unittest.TestCase):
         self.mom_trans.requires_grad_()
 
         self.assertTrue(torch.autograd.gradcheck(compute_geodesic_control, (self.gd_silent, self.gd_trans, self.mom_silent, self.mom_trans), raise_exception=False))
+
+    def test_hamiltonian_control_grad_zero(self):
+        self.compound.fill_controls([torch.tensor([]), torch.zeros_like(self.compound[1].controls, requires_grad=True)])
+        h = dm.hamiltonian.Hamiltonian(self.compound)
+        h.geodesic_controls()
+
+        [d_controls_silent, d_controls_trans] = torch.autograd.grad(h(), self.compound.controls, allow_unused=True)
+
+        self.assertTrue(torch.allclose(d_controls_trans, torch.zeros_like(d_controls_trans)))
 

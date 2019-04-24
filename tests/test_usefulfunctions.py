@@ -122,3 +122,12 @@ class TestUsefulFunctions(unittest.TestCase):
         M_ = torch.tensor([[0, 1, 4, 5], [2, 3, 6, 7], [8, 9, 12, 13], [10, 11, 14, 15]])
         self.assertTrue(torch.all(torch.eq(dm.usefulfunctions.blocks_to_2d_fast(M), M_)))
 
+    def test_close_shape(self):
+        nb_pts = 10
+        dim = 2
+        points = torch.rand(nb_pts, dim)
+        closed = dm.usefulfunctions.close_shape(points)
+
+        self.assertTrue(closed.shape, torch.Size([nb_pts + 1, dim]))
+        self.assertTrue(torch.all(torch.eq(closed[0, :], closed[-1, :])))
+

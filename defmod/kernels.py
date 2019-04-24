@@ -30,12 +30,12 @@ def sqdistances(x, y):
 
 def K_xx(x, sigma):
     """Kernel matrix for x."""
-    return (-sqdistances(x, x)/sigma**2/2).exp()
+    return (-0.5 * sqdistances(x, x)/sigma**2).exp()
 
 
 def K_xy(x, y, sigma):
     """Kernel matrix between x and y."""
-    return (-sqdistances(x, y)/sigma**2/2).exp()
+    return (-0.5 * sqdistances(x, y)/sigma**2).exp()
 
 
 def gauss_kernel(x, k, sigma):
