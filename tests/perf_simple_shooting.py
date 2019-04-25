@@ -9,9 +9,9 @@ import defmod as dm
 
 def simple_shooting(method, it):
     dim = 2
-    nb_pts_silent = 250
-    nb_pts_order0 = 200
-    nb_pts_order1 = 150
+    nb_pts_silent = 150
+    nb_pts_order0 = 100
+    nb_pts_order1 = 2000
 
     pts_silent = torch.rand(nb_pts_silent, dim)
     pts_order0 = torch.rand(nb_pts_order0, dim)
@@ -55,8 +55,8 @@ def method_summary(method, it, loops):
     print("For method %s, average shooting time: %5.4f s, average backpropagating time: %5.4f s." % (method, avg_shoot, avg_back))
 
 torch.set_printoptions(precision=4)
-method_summary("torch_euler", 10, 20)
-method_summary("euler", 10, 20)
+method_summary("euler", 10, 1)
+method_summary("torch_euler", 10, 1)
 for i in range(10):
-    method_summary("rk4", i+1, 10)
+    method_summary("rk4", i+1, 1)
 

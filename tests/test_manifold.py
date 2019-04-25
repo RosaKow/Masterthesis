@@ -70,12 +70,12 @@ class TestLandmarks(unittest.TestCase):
         trans = dm.deformationmodules.Translations(landmarks_mod, 1.5)
         trans.fill_controls(torch.rand_like(landmarks_mod.gd))
 
-        man = landmarks.action(trans)
+        man = landmarks.action(trans.field_generator())
 
         self.assertIsInstance(man, dm.manifold.Landmarks)
         self.assertEqual(man.gd.shape[0], 2*self.nb_pts)
 
-    def test_inner_prod_module(self):
+    def test_inner_prod_field(self):
         landmarks = dm.manifold.Landmarks(2, self.nb_pts, gd=self.gd, tan=self.tan, cotan=self.cotan)
 
         nb_pts_mod = 15
@@ -83,7 +83,7 @@ class TestLandmarks(unittest.TestCase):
         trans = dm.deformationmodules.Translations(landmarks_mod, 1.5)
         trans.fill_controls(torch.rand_like(landmarks_mod.gd))
 
-        inner_prod = landmarks.inner_prod_module(trans)
+        inner_prod = landmarks.inner_prod_field(trans.field_generator())
 
         self.assertIsInstance(inner_prod, torch.Tensor)
         self.assertEqual(inner_prod.shape, torch.Size([]))
@@ -147,7 +147,7 @@ class TestLandmarks(unittest.TestCase):
             landmarks.fill_gd(gd)
             module = dm.deformationmodules.Translations(landmarks, 2.)
             module.fill_controls(controls)
-            man = landmarks.action(module)
+            man = landmarks.action(module.field_generator())
             return man.gd, man.tan, man.cotan
 
         self.gd.requires_grad_()
@@ -156,18 +156,18 @@ class TestLandmarks(unittest.TestCase):
 
         self.assertTrue(gradcheck(action, (self.gd, controls), raise_exception=False))
 
-    def test_gradcheck_inner_prod_module(self):
-        def inner_prod_module(gd, controls):
+    def test_gradcheck_inner_prod_field(self):
+        def inner_prod_field(gd, controls):
             landmarks.fill_gd(gd)
             module = dm.deformationmodules.Translations(landmarks, 2.)
             module.fill_controls(controls)
-            return landmarks.inner_prod_module(module)
+            return landmarks.inner_prod_field(module.field_generator())
 
         self.gd.requires_grad_()
         controls = torch.rand_like(self.gd, requires_grad=True)
         landmarks = dm.manifold.Landmarks(2, self.nb_pts, gd=self.gd)
 
-        self.assertTrue(gradcheck(inner_prod_module, (self.gd, controls), raise_exception=False))
+        self.assertTrue(gradcheck(inner_prod_field, (self.gd, controls), raise_exception=False))
 
 
 class TestCompoundManifold(unittest.TestCase):
@@ -246,7 +246,7 @@ class TestCompoundManifold(unittest.TestCase):
         landmarks_mod = dm.manifold.Landmarks(2, nb_pts_mod, gd=torch.rand(nb_pts_mod, 2).view(-1))
         trans = dm.deformationmodules.Translations(landmarks_mod, 1.5)
 
-        man = self.compound.action(trans)
+        man = self.compound.action(trans.field_generator())
 
         self.assertIsInstance(man, dm.manifold.CompoundManifold)
         self.assertTrue(man.nb_manifold, self.compound.nb_manifold)
@@ -324,8 +324,8 @@ class TestCompoundManifold(unittest.TestCase):
 
         self.assertTrue(gradcheck(action, [self.gd0, self.gd1, controls0, controls1], raise_exception=True))
 
-    def test_gradcheck_inner_prod_module(self):
-        def inner_prod_module(*tensors):
+    def test_gradcheck_inner_prod_field(self):
+        def inner_prod_field(*tensors):
             gd = tensors[:2]
             controls = tensors[2:]
             module0 = dm.deformationmodules.Translations.build_and_fill(2, self.nb_pts0, 1., gd=gd[0])
@@ -333,7 +333,7 @@ class TestCompoundManifold(unittest.TestCase):
             module1 = dm.deformationmodules.Translations.build_and_fill(2, self.nb_pts1, 1., gd=gd[1])
             module1.fill_controls(controls[1])
             
-            return self.compound.inner_prod_module(dm.deformationmodules.CompoundModule([module0, module1]))
+            return self.compound.inner_prod_field(dm.deformationmodules.CompoundModule([module0, module1]).field_generator())
 
         gd = [self.gd0.requires_grad_(), self.gd1.requires_grad_()]
         controls0 = torch.rand_like(self.gd0, requires_grad=True)
@@ -341,5 +341,5 @@ class TestCompoundManifold(unittest.TestCase):
 
         controls = [controls0, controls1]
 
-        self.assertTrue(gradcheck(inner_prod_module, [*gd, *controls], raise_exception=False))
+        self.assertTrue(gradcheck(inner_prod_field, [*gd, *controls], raise_exception=False))
 

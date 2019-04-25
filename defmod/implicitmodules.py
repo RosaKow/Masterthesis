@@ -152,8 +152,8 @@ class ImplicitModule1(DeformationModule):
         tlambdas, _ = torch.gesv(S.view(-1, 1), self.__coeff * self.__sks)
 
         (aq, aqkiaq) = self.__compute_aqkiaq()
-        self.__controls, _ = torch.gesv(torch.mm(aq.t(), tlambdas), aqkiaq)
-        self.__controls = self.__controls.reshape(-1)
+        c, _ = torch.gesv(torch.mm(aq.t(), tlambdas), aqkiaq)
+        self.__controls = c.reshape(-1)
         self.__compute_moments()
 
     def field_generator(self):
@@ -185,8 +185,9 @@ class ImplicitModule1(DeformationModule):
         for i in range(self.__dim_controls):
             h = torch.zeros(self.__dim_controls)
             h[i] = 1.
-            aq[:, i] = self.__compute_aqh(h).view(-1)
-            l, _ = torch.gesv(aq[:, i].view(-1, 1), self.__sks)
+            aqi = self.__compute_aqh(h).view(-1)
+            aq[:, i] = aqi
+            l, _ = torch.gesv(aqi.view(-1, 1), self.__sks)
             lambdas[i, :] = l.view(-1)
 
         return (aq, torch.mm(lambdas, aq))
