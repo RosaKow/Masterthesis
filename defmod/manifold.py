@@ -472,18 +472,11 @@ class CompoundManifold(Manifold):
     def inner_prod_field(self, field):
         return sum([m.inner_prod_field(field) for m in self.__manifold_list])
 
-<<<<<<< HEAD
-    def action(self, module):
-        
-        actions = []
-        for m in self.__manifold_list:
-            actions.append(m.action(module))
-=======
+
     def action(self, field):
         actions = []
         for m in self.__manifold_list:
             actions.append(m.action(field))
->>>>>>> 7cf84ddcad243dc7192aa62f730d37e4e8324042
 
         return CompoundManifold(actions)
 

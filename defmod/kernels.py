@@ -1,8 +1,3 @@
-<<<<<<< HEAD
-
-import torch
-=======
->>>>>>> 7cf84ddcad243dc7192aa62f730d37e4e8324042
 import numpy as np
 import torch
 # from pykeops.torch import Kernel, kernel_product, Genred

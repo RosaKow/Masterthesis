@@ -7,11 +7,10 @@ import numpy as np
 from .structuredfield import StructuredField_Null, StructuredField_0, CompoundStructuredField
 from .kernels import gauss_kernel, K_xx, K_xy, compute_sks
 from .manifold import Landmarks, CompoundManifold
-<<<<<<< HEAD
+
 from .usefulfunctions import make_grad_graph
 import multimodule_usefulfunctions as mm
-=======
->>>>>>> 7cf84ddcad243dc7192aa62f730d37e4e8324042
+
 
 
 class DeformationModule:
