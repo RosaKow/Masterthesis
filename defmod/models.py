@@ -177,14 +177,11 @@ class ModelCompoundWithPointsRegistration(ModelCompound):
         compound = CompoundModule(self.modules)
         compound.manifold.fill(self.init_manifold)
         h = Hamiltonian(compound)
-        shoot(h, it=10, method='midpoint')
+        shoot(h, 10, "torch_euler")
         self.__shot_points = compound[0].manifold.gd.view(-1, 2)
         self.shot_manifold = compound.manifold.copy()
         self.deformation_cost = compound.cost()
         self.attach = self.attachement((self.__shot_points, self.alpha), target)
-        #self.attach = self.loss(self.__shot_points, target[0])
-        #self.attach = cost_varifold(self.__shot_points, target[0], 10.) + cost_varifold(self.__shot_points, target[0], 50.)
-        #self.attach = fidelity((self.__shot_points, self.alpha), target)
 
     def __call__(self):
         return self.__shot_points, self.alpha

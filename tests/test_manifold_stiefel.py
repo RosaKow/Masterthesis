@@ -126,11 +126,11 @@ class TestStiefel(unittest.TestCase):
         trans = dm.deformationmodules.Translations(landmarks_mod, 1.5)
         trans.fill_controls(torch.rand_like(landmarks_mod.gd))
 
-        man = stiefel.action(trans)
+        man = stiefel.action(trans.field_generator())
 
         self.assertIsInstance(man, dm.manifold.Stiefel)
 
-    def test_inner_prod_module(self):
+    def test_inner_prod_field(self):
         stiefel = dm.manifold.Stiefel(self.dim, self.nb_pts, gd=self.gd, tan=self.tan, cotan=self.cotan)
 
         nb_pts_mod = 15
@@ -138,7 +138,7 @@ class TestStiefel(unittest.TestCase):
         trans = dm.deformationmodules.Translations(landmarks_mod, 1.5)
         trans.fill_controls(torch.rand_like(landmarks_mod.gd))
 
-        inner_prod = stiefel.inner_prod_module(trans)
+        inner_prod = stiefel.inner_prod_field(trans.field_generator())
 
         self.assertIsInstance(inner_prod, torch.Tensor)
         self.assertEqual(inner_prod.shape, torch.Size([]))
@@ -212,7 +212,7 @@ class TestStiefel(unittest.TestCase):
             stiefel.fill_gd((gd_pts, gd_mat))
             module = dm.implicitmodules.ImplicitModule1(stiefel, C, 1., 0.01)
             module.fill_controls(controls)
-            man = stiefel.action(module)
+            man = stiefel.action(module.field_generator())
             return man.gd[0], man.gd[1], man.tan[0], man.tan[1], man.cotan[0], man.cotan[1]
 
         self.gd_pts.requires_grad_()
@@ -224,16 +224,17 @@ class TestStiefel(unittest.TestCase):
 
         self.assertTrue(gradcheck(action, (self.gd_pts, self.gd_mat, controls), raise_exception=False))
 
-    # def test_gradcheck_inner_prod_module(self):
-    #     def inner_prod_module(gd, controls):
+    # def test_gradcheck_inner_prod_field(self):
+    #     def inner_prod_field(gd, controls):
+    #         landmarks = dm.manifold.Landmarks(2, self.nb_pts, gd=self.gd)
     #         landmarks.fill_gd(gd)
     #         module = dm.deformationmodules.Translations(landmarks, 2.)
     #         module.fill_controls(controls)
-    #         return landmarks.inner_prod_module(module)
+    #         return landmarks.inner_prod_field(module.field_generator())
 
-    #     self.gd.requires_grad_()
-    #     controls = torch.rand_like(self.gd, requires_grad=True)
-    #     landmarks = dm.manifold.Landmarks(2, self.nb_pts, gd=self.gd)
+    #     self.gd[0].requires_grad_()
+    #     self.gd[1].requires_grad_()
+    #     controls = torch.rand_like(self.gd[0], requires_grad=True)
 
-    #     self.assertTrue(gradcheck(inner_prod_module, (self.gd, controls), raise_exception=False))
+    #     self.assertTrue(gradcheck(inner_prod_field, (self.gd, controls), raise_exception=False))
 

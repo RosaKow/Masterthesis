@@ -4,8 +4,18 @@ import numpy as np
 from .kernels import gauss_kernel, rel_differences, K_xy
 
 class StructuredField:
+    def __init__(self):
+        pass
+
+    def __call__(self, points, k=0):
+        raise NotImplementedError
+
+
+class SupportStructuredField(StructuredField):
     def __init__(self, support, moments):
-        self.fill(support, moments)
+        super().__init__()
+        self.__support = support
+        self.__moments = moments
 
     @property
     def support(self):
@@ -15,23 +25,16 @@ class StructuredField:
     def moments(self):
         return self.__moments
 
-    def fill(self, support, moments):
-        self.__support = support
-        self.__moments = moments
-
-    def __call__(self, points, k=0):
-        raise NotImplementedError
-
 
 class StructuredField_Null(StructuredField):
     def __init__(self):
-        super().__init__(None, None)
+        super().__init__()
 
     def __call__(self, points, k=0):
         return torch.zeros([points.shape[0]] + [2]*(k+1))
 
 
-class StructuredField_0(StructuredField):
+class StructuredField_0(SupportStructuredField):
     def __init__(self, support, moments, sigma):
         super().__init__(support, moments)
         self.__sigma = sigma
@@ -46,7 +49,7 @@ class StructuredField_0(StructuredField):
         return torch.tensordot(torch.transpose(torch.tensordot(torch.eye(2), ker_vec, dims=0), 0, 2), self.moments, dims=([2, 3], [1, 0]))
 
 
-class StructuredField_p(StructuredField):
+class StructuredField_p(SupportStructuredField):
     def __init__(self, support, moments, sigma):
         super().__init__(support, moments)
         self.__sigma = sigma
@@ -62,7 +65,7 @@ class StructuredField_p(StructuredField):
         return torch.tensordot(torch.transpose(torch.tensordot(torch.eye(2), ker_vec, dims=0), 0, 2), P, dims=([2, 3, 4], [1, 0, 2]))
 
 
-class StructuredField_m(StructuredField):
+class StructuredField_m(SupportStructuredField):
     def __init__(self, support, moments, sigma):
         super().__init__(support, moments)
         self.__sigma = sigma
@@ -80,7 +83,7 @@ class StructuredField_m(StructuredField):
 
 class CompoundStructuredField(StructuredField):
     def __init__(self, fields):
-        super().__init__(None, None) # TODO: find a nice way to handle this
+        super().__init__()
         self.__fields = fields
 
     @property

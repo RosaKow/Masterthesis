@@ -1,6 +1,10 @@
+<<<<<<< HEAD
 
 import torch
+=======
+>>>>>>> 7cf84ddcad243dc7192aa62f730d37e4e8324042
 import numpy as np
+import torch
 # from pykeops.torch import Kernel, kernel_product, Genred
 # from pykeops.torch.kernel_product.formula import *
 
@@ -66,12 +70,12 @@ def eta():
 def compute_sks(x, sigma, order):
     N = x.shape[0]
     if order == 0:
-        return blocks_to_2d_fast(torch.einsum('ij, kl->ijkl', gauss_kernel(rel_differences(x, x), 0, sigma).view(N, N), torch.eye(2)).view(N*N, 2, 2))
+        return torch.einsum('ij, kl->ijkl', gauss_kernel(rel_differences(x, x), 0, sigma).view(N, N), torch.eye(2)).permute([0, 2, 1, 3]).contiguous().view(2*N, 2*N)
     elif order == 1:
         A = torch.tensordot(-gauss_kernel(rel_differences(x, x), 2, sigma), torch.eye(2), dims=0)
         K = torch.tensordot(torch.transpose(A, 2, 3), eta())
         K = torch.tensordot(K, eta(), dims=([1, 2], [0, 1]))
-        return blocks_to_2d_fast(K)
+        return K.view(N, N, 3, 3).contiguous().permute([0, 2, 1, 3]).contiguous().view(3*N, 3*N)
     else:
         raise NotImplementedError
 

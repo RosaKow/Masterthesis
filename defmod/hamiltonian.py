@@ -33,7 +33,7 @@ class Hamiltonian:
 
     def apply_mom(self):
         """Apply the moment on the geodesic descriptors."""
-        return self.__module.manifold.inner_prod_module(self.__module)
+        return self.__module.manifold.inner_prod_field(self.__module.field_generator())
 
     def geodesic_controls(self):
         self.__module.compute_geodesic_control(self.__module.manifold)

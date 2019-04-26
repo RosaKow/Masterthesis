@@ -110,14 +110,14 @@ class TestImplicitModule1(unittest.TestCase):
         self.tan = (torch.rand(self.nb_pts, 2).view(-1), torch.rand(self.nb_pts, 2, 2).view(-1))
         self.cotan = (torch.rand(self.nb_pts, 2).view(-1), torch.rand(self.nb_pts, 2, 2).view(-1))
         self.stiefel = dm.manifold.Stiefel(self.dim, self.nb_pts, gd=self.gd, tan=self.tan, cotan=self.cotan)
-        self.dim_controls = 3
+        self.dim_controls = 2
         self.controls = torch.rand(self.dim_controls)
         self.C = torch.rand(self.nb_pts, self.dim, self.dim_controls)
         self.nu = 1e-3
         self.sigma = 1.0
 
         self.implicit = dm.implicitmodules.ImplicitModule1(self.stiefel, self.C, self.sigma, self.nu)
-        #self.implicit.fill_controls(self.controls)
+        self.implicit.fill_controls(self.controls)
 
     def test_call(self):
         points = torch.rand(10, 2)
@@ -168,30 +168,32 @@ class TestImplicitModule1(unittest.TestCase):
 
         self.assertTrue(torch.autograd.gradcheck(cost, (self.gd[0], self.gd[1], self.controls), raise_exception=False))
 
-    # def test_hamiltonian_control_grad_zero(self):
-    #     self.implicit.fill_controls(torch.zeros_like(self.implicit.controls, requires_grad=True))
-    #     h = dm.hamiltonian.Hamiltonian([self.implicit])
-    #     h.geodesic_controls()
+    # TODO: Gradcheck
+    def test_hamiltonian_control_grad_zero(self):
+        self.implicit.fill_controls(torch.zeros_like(self.implicit.controls, requires_grad=True))
+        h = dm.hamiltonian.Hamiltonian([self.implicit])
+        h.geodesic_controls()
+        h.module[0].fill_controls(h.module[0].controls.requires_grad_())
 
-    #     [d_controls] = torch.autograd.grad(h(), [self.implicit.controls])
+        [d_controls] = torch.autograd.grad(h(), [self.implicit.controls])
 
-    #     self.assertTrue(torch.allclose(d_controls, torch.zeros_like(d_controls)))
+        self.assertTrue(torch.allclose(d_controls, torch.zeros_like(d_controls)))
 
 
     # TODO: make compute_geodesic_control() differentiable wrt gd and cotan
-    # def test_gradcheck_compute_geodesic_control(self):
-    #     def compute_geodesic_control(gd_pts, gd_mat, mom_pts, mom_mat):
-    #         self.implicit.manifold.fill_gd((gd_pts, gd_mat))
-    #         self.implicit.manifold.fill_cotan((mom_pts, mom_mat))
-    #         self.implicit.compute_geodesic_control(self.implicit.manifold)
+    def test_gradcheck_compute_geodesic_control(self):
+        def compute_geodesic_control(gd_pts, gd_mat, mom_pts, mom_mat):
+            self.implicit.manifold.fill_gd((gd_pts, gd_mat))
+            self.implicit.manifold.fill_cotan((mom_pts, mom_mat))
+            self.implicit.compute_geodesic_control(self.implicit.manifold)
 
-    #         return self.implicit.controls
+            return self.implicit.controls
 
-    #     self.gd[0].requires_grad_()
-    #     self.gd[1].requires_grad_()
-    #     self.cotan[0].requires_grad_()
-    #     self.cotan[1].requires_grad_()
+        self.gd[0].requires_grad_()
+        self.gd[1].requires_grad_()
+        self.cotan[0].requires_grad_()
+        self.cotan[1].requires_grad_()
 
-    #     self.assertTrue(torch.autograd.gradcheck(compute_geodesic_control, (self.gd[0], self.gd[1], self.cotan[0], self.cotan[1]), raise_exception=False))
+        self.assertTrue(torch.autograd.gradcheck(compute_geodesic_control, (self.gd[0], self.gd[1], self.cotan[0], self.cotan[1]), raise_exception=False))
 
     
