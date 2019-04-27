@@ -5,6 +5,8 @@ from .hamiltonian import Hamiltonian
 from torchdiffeq import odeint as odeint
 from .usefulfunctions import make_grad_graph
 
+import defmod as dm
+
 
 
 def shoot(h, it, method):
@@ -17,10 +19,21 @@ def shoot(h, it, method):
 def shoot_euler(h, it):
     step = 1. / it
 
-    intermediate_states = [h.module.manifold.copy()]
-    intermediate_controls = []
+
+    intermediate = [h.module.manifold.copy()]
+    modules_t = []
+    print(h.module[0].controls)
+    
     for i in range(it):
         h.geodesic_controls()
+        ################################
+        print(h.module[0].controls)
+        print(h.constraints(h.module))
+        constr = dm.constraints.Identity()
+        print(constr(h.module))
+        print(h.apply_constr())
+
+        #############################
         l = [*h.module.manifold.unroll_gd(), *h.module.manifold.unroll_cotan()]
         delta = grad(h(), l, create_graph=True, allow_unused=True)
         # TODO: is list() necessary?
@@ -43,14 +56,23 @@ def shoot_euler_controls(h, controls, it):
         h.module.fill_controls(controls[i])
         l = [*h.module.manifold.unroll_gd(), *h.module.manifold.unroll_cotan()]
         delta = grad(h(), l, create_graph=True)
-        # TODO: is list() necessary?
+
+
         d_gd = h.module.manifold.roll_gd(list(delta[:int(len(delta)/2)]))
         d_mom = h.module.manifold.roll_cotan(list(delta[int(len(delta)/2):]))
+        d_gd2 = [gdi.action(modulei).tan for gdi, modulei in zip(h.module.manifold.manifold_list, h.module)]
+        #print(d_gd)
+        #print('----------------------')
+        #print(d_gd2)
+        
         h.module.manifold.muladd_gd(d_mom, step)
         h.module.manifold.muladd_cotan(d_gd, -step)
-        intermediate_states.append(h.module.manifold.copy())
 
-    return intermediate_states
+        intermediate.append(h.module.manifold.copy())
+        
+        modules_t = [*modules_t, h.module]
+
+    return intermediate, modules_t
 
 
 def shoot_torchdiffeq(h, it, method='rk4'):

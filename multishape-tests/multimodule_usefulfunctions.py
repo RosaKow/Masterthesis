@@ -18,6 +18,13 @@ def computeCenter(gd):
             gd = gd.unsqueeze(0)
     return torch.mean(gd,0)
 
+def points_in_background(self, points):
+    label = [False]*len(points)
+    for i in range(len(self.__points_in_region)):
+        label = np.logical_or(self.__points_in_region[i](points), label)
+    return np.logical_not(label)
+
+
 def kronecker_I2(K):
     N = K.shape
     tmp = K.view(-1,1).repeat(1,2).view(N[0],2*N[1]).transpose(1,0).contiguous().view(-1,1).repeat(1,2).view(-1,N[0]*2).transpose(1,0)

@@ -88,8 +88,9 @@ class MultiShapeModule(torch.nn.Module):
     controls = property(__get_controls, fill_controls)
 
     def fill_controls_zero(self):
-        for m in self.__module_list:
-            m.fill_controls_zero()       
+        #for m in self.__module_list:
+        #    m.fill_controls_zero()  
+        self.fill_controls([*[torch.zeros(m.dim_controls) for m in self.module_list[:-1]], [torch.zeros(m.dim_controls) for m in self.module_list[:-1]]])
             
     def __get_l(self):
         return self.__l
@@ -151,14 +152,17 @@ class MultiShapeModule(torch.nn.Module):
         B = torch.mm(constr_mat, torch.cat( [*gd_moved[:-1], *gd_moved[-1]]).view(-1,1))
         
         #trying to make it more general
+
         #gd_action = [man.action(mod).tan for mod,man in zip(self.module_list, self.manifold)]
         #gd2 = self.action_on_self().tan
-        B1 = torch.mm(constr_mat, dm.multimodule_usefulfunctions.gdlist2tensor(gd_action).view(-1,1))
+
+
+        B1 = torch.mm(constr_mat, dm.multimodule_usefulfunctions.gdlist2tensor(gd_moved).view(-1,1))
       
         #print(gd_moved)
         #print(gd_action)
         #print(gd2)
-        print('____________')
+        #print('____________')
         #############################
         
         A = torch.mm(torch.mm(constr_mat, self.autoaction()), torch.transpose(constr_mat,0,1))

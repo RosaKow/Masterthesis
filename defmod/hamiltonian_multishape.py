@@ -11,12 +11,15 @@ from .deformationmodules import CompoundModule
 
 class Hamiltonian_multi:
     def __init__(self, modules, constr):
-            self.__modules = modules
+            self.__modules = modules#.copy()
             self.__constr = constr
 
     @property
     def module(self):
         return self.__modules
+    @property
+    def constraints(self):
+        return self.__constr
 
     def __call__(self):
         """Computes the hamiltonian."""
@@ -24,11 +27,12 @@ class Hamiltonian_multi:
 
     def apply_mom(self):
         """Apply the moment on the geodesic descriptors."""     
-        return sum([mod.manifold.inner_prod_module(mod) for mod in self.__modules])
+        return sum([self.__modules.manifold.manifold_list[i].inner_prod_field(self.__modules[i].field_generator()) for i in range(len(self.__modules.module_list))])
+    #sum([mod.manifold.inner_prod_module(mod) for mod in self.__modules])
 
     def geodesic_controls(self):
         self.__modules.compute_geodesic_variables(self.__modules.manifold, self.__constr)
         
     def apply_constr(self):
         """ Apply Constraints on the generated vectorfields"""
-        return torch.dot(self.__modules.l.view(-1,1).squeeze(), self.__constr().view(-1,1).squeeze())
+        return torch.dot(self.__modules.l.view(-1,1).squeeze(), self.__constr(self.__modules).view(-1,1).squeeze())

@@ -9,7 +9,8 @@ from .kernels import gauss_kernel, K_xx, K_xy, compute_sks
 from .manifold import Landmarks, CompoundManifold
 
 from .usefulfunctions import make_grad_graph
-import multimodule_usefulfunctions as mm
+
+from .multimodule_usefulfunctions import kronecker_I2
 
 
 
@@ -101,7 +102,7 @@ class Translations(DeformationModule):
     def autoaction(self):
         """ computes matrix for autoaction = xi zeta Z^-1 zeta^\ast xi^\ast """
         ## Kernelmatrix K_qq
-        return mm.kronecker_I2(K_xx(self.manifold.gd.view(-1, self.__manifold.dim), self.__sigma))
+        return kronecker_I2(K_xx(self.manifold.gd.view(-1, self.__manifold.dim), self.__sigma))
 
 class SilentPoints(DeformationModule):
     """Module handling silent points."""
@@ -222,6 +223,9 @@ class CompoundModule(DeformationModule, Iterable):
 
     def compute_geodesic_control(self, man):
         """Computes geodesic control from \delta \in H^\ast."""
+        #print('___________')
+        #print('compound comp_geo_cont')
+        #print(man.cotan, len(man.cotan))
         for i in range(self.nb_module):
             self.__module_list[i].compute_geodesic_control(man)
 
@@ -240,6 +244,7 @@ class Background(DeformationModule):
         super().__init__()
         self.__module_list = [mod.copy() for mod in module_list]
         self.__sigma = sigma
+        self.__manifold = CompoundManifold([m.manifold.copy() for m in self.__module_list])
         
     @property
     def module_list(self):
@@ -251,7 +256,7 @@ class Background(DeformationModule):
 
     @property
     def manifold(self):
-        return CompoundManifold([m.manifold for m in self.__module_list])
+        return self.__manifold
     
     @property
     def dim_controls(self):
@@ -265,10 +270,14 @@ class Background(DeformationModule):
     def __get_controls(self):
         return [m.controls for m in self.__module_list]
 
-    def fill_controls(self, controls):
+    def fill_controls(self, controls, copy=False):
         assert len(controls) == self.nb_module
-        for i in range(self.nb_module):
-            self.__module_list[i].fill_controls(controls[i])
+        if copy:
+            for i in range(self.nb_module):
+                self.__module_list[i].fill_controls(controls[i].clone().requires_grad_())
+        else:
+            for i in range(self.nb_module):
+                self.__module_list[i].fill_controls(controls[i])
         
     def fill_controls_zero(self):
         for m in self.__module_list:
@@ -302,17 +311,17 @@ class Background(DeformationModule):
     
     def compute_geodesic_control_from_self(self):
         """ assume man is of the same type and has the same gd as self.__man"""
-        self.fill_controls(self.manifold.cotan)
+        self.fill_controls(self.manifold.cotan.copy())
         
     def compute_geodesic_control(self, man):
         """ assume man is of the same type and has the same gd as self.__man"""
         # assert..
-        self.fill_controls(man.cotan)
+        self.fill_controls(man.cotan.copy())
         
         
     def autoaction(self):
         """ computes matrix for autoaction = xi zeta Z^-1 zeta^\ast xi^\ast """
-        return mm.kronecker_I2(self.K_q())
+        return kronecker_I2(self.K_q())
         
         
 class GlobalTranslation(DeformationModule):
