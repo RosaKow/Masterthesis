@@ -8,7 +8,6 @@ from .usefulfunctions import make_grad_graph
 import defmod as dm
 
 
-
 def shoot(h, it, method):
     if method == "torch_euler":
         return shoot_euler(h, it)
@@ -19,11 +18,9 @@ def shoot(h, it, method):
 def shoot_euler(h, it):
     step = 1. / it
 
+    intermediate_states = [h.module.manifold.copy()]
+    intermediate_controls = []
 
-    intermediate = [h.module.manifold.copy()]
-    modules_t = []
-    print(h.module[0].controls)
-    
     for i in range(it):
         h.geodesic_controls()
         ################################
@@ -55,8 +52,27 @@ def shoot_euler_controls(h, controls, it):
     for i in range(it):
         h.module.fill_controls(controls[i])
         l = [*h.module.manifold.unroll_gd(), *h.module.manifold.unroll_cotan()]
-        delta = grad(h(), l, create_graph=True)
+        delta = grad(h(), l, create_graph=True, allow_unused=True)
+        # TODO: is list() necessary?
+        d_gd = h.module.manifold.roll_gd(list(delta[:int(len(delta)/2)]))
+        d_mom = h.module.manifold.roll_cotan(list(delta[int(len(delta)/2):]))
+        h.module.manifold.muladd_gd(d_mom, step)
+        h.module.manifold.muladd_cotan(d_gd, -step)
+        intermediate_states.append(h.module.manifold.copy())
+        intermediate_controls.append(h.module.controls)
 
+    return intermediate_states, intermediate_controls
+
+
+def shoot_euler_controls(h, controls, it):
+    assert len(controls) == it
+    step = 1. / it
+
+    intermediate_states = [h.module.manifold.copy()]
+    for i in range(it):
+        h.module.fill_controls(controls[i])
+        l = [*h.module.manifold.unroll_gd(), *h.module.manifold.unroll_cotan()]
+        delta = grad(h(), l, create_graph=True)
 
         d_gd = h.module.manifold.roll_gd(list(delta[:int(len(delta)/2)]))
         d_mom = h.module.manifold.roll_cotan(list(delta[int(len(delta)/2):]))
@@ -73,6 +89,7 @@ def shoot_euler_controls(h, controls, it):
         modules_t = [*modules_t, h.module]
 
     return intermediate, modules_t
+
 
 
 def shoot_torchdiffeq(h, it, method='rk4'):
