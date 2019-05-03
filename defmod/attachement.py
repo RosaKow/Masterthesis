@@ -35,6 +35,14 @@ class L2NormAttachement(Attachement):
 
     def loss(self, x, y):
         return torch.dist(a, b)
+    
+class L2NormAttachement_multi(Attachement):
+    """L2 norm distance between two measures."""
+    def __init__(self):
+        super().__init__()
+
+    def loss(self, x, y):
+        return sum([torch.dist(a.view(-1),b.view(-1)) for a,b in zip(x[:-1],y[:-1])])
 
 
 class VarifoldAttachement(Attachement):

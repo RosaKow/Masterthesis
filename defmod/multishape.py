@@ -142,9 +142,9 @@ class MultiShapeModule(torch.nn.Module):
             n = n+ni
         return A
     
-    def compute_geodesic_variables(self, manifold, constr):
+    def compute_geodesic_variables(self, constr):
 
-        self.compute_geodesic_control_from_self()
+        self.compute_geodesic_control_from_self(self.manifold)
         fields = self.field_generator()
         constr_mat = constr.constraintsmatrix(self)
         
@@ -171,31 +171,25 @@ class MultiShapeModule(torch.nn.Module):
         self.fill_l(lambda_qp)
              
         p = torch.cat([*self.manifold.cotan[:-1], *self.manifold.cotan[-1]],0).view(-1,1) # cotan 2 
+        cotan = dm.multimodule_usefulfunctions.gdtensor2list((p - torch.mm(torch.transpose(constr_mat,0,1), lambda_qp)).view(-1), self.numel_gd[:-1])
+        
         man = self.manifold.copy()
-        cotan = dm.multimodule_usefulfunctions.gdtensor2list(p - torch.mm(torch.transpose(constr_mat,0,1), lambda_qp), self.numel_gd[:-1])
         man.cotan = cotan
-        self.compute_geodesic_control(man)
+        self.compute_geodesic_control_from_self(man)
         h_qp = self.controls
                                         
         return lambda_qp, h_qp
-        
-        #return 
+      
     
     def compute_geodesic_control(self, manifold): 
-        for m, man in zip(self.__module_list, manifold.manifold_list):            
-            m.compute_geodesic_control(man)
+
         self.fill_controls([m.controls for m in self.__module_list])
         
             
-    def compute_geodesic_control_from_self(self):
-        for m in self.__module_list:            
-            m.compute_geodesic_control_from_self()
-            
-            
-    def action_on_self(self):
-    #### NOT WORKING 
-        actions = []
-        for man, mod in zip(self.manifold.manifold_list, self.module_list):
-            actions.append(man.action(mod))
+    def compute_geodesic_control_from_self(self, manifold):
+        # TODO: check manifold and self.manifold have the same type
+        for m, man in zip(self.__module_list, manifold.manifold_list):            
+            m.compute_geodesic_control_from_self(man)
 
-        return CompoundManifold(actions)
+            
+         

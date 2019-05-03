@@ -16,6 +16,9 @@ from .usefulfunctions import AABB, grid2vec, vec2grid, make_grad_graph, close_sh
 from .kernels import distances, scal
 from .sampling import sample_from_greyscale, sample_from_smoothed_points, resample_image_to_smoothed, deformed_intensities
 
+from .multishape import MultiShapeModule
+from .hamiltonian_multishape import Hamiltonian_multi
+
 
 def fidelity(a, b):
     """Energy Distance between two sampled probability measures."""
@@ -222,3 +225,37 @@ class ModelCompoundImageRegistration(ModelCompound):
     def __call__(self):
         return self.__output_image
 
+
+    
+    
+class ModelMultishapePointsRegistration(Model):
+    def __init__(self, source, module_list, sigma_bg, fixed, attachement, constr):
+        
+        self.__module_list = module_list
+        self.__init_manifold = MultiShapeModule(module_list).manifold.copy()
+        self.__sigma_bg = sigma_bg
+        self.__constr = constr
+        
+        self.__parameters = []
+        for i in range(len(module_list) + 1):
+            self.__parameters.extend(self.__init_manifold[i].unroll_cotan())
+            
+        super().__init__(attachement)
+        
+    @property
+    def parameters(self):
+        return self.__parameters
+
+    def compute(self, target):
+        modules = MultiShapeModule(self.__module_list, self.__sigma_bg)
+        modules.manifold.fill(self.__init_manifold)
+        h = Hamiltonian_multi(modules, self.__constr)
+        shoot_euler(h, 10)
+        
+        self.__shot_points = [*[gd.view(-1, 2) for gd in modules.manifold.gd[:-1]], [gd.view(-1, 2) for gd in modules.manifold.gd[-1]]]
+        self.shot_manifold = modules.manifold.copy()
+        self.deformation_cost = modules.cost()
+        self.attach = self.attachement(self.__shot_points, target)
+
+    def __call__(self):
+        return self.__shot_points

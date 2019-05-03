@@ -108,23 +108,23 @@ class Landmarks(Manifold):
     def fill_gd(self, gd, copy=False):
         assert gd.shape[0] == self.__numel_gd
         if copy:
-            self.__gd = gd.clone().requires_grad_()
+            self.__gd = gd.detach().clone().requires_grad_()
         else:
-            self.__gd = gd
+            self.__gd = gd.requires_grad_()
 
     def fill_tan(self, tan, copy=False):
         assert tan.shape[0] == self.__numel_gd
         if copy:
-            self.__tan = tan.clone().requires_grad_()
+            self.__tan = tan.detach().clone().requires_grad_()
         else:
-            self.__tan = tan
+            self.__tan = tan.requires_grad_()
 
     def fill_cotan(self, cotan, copy=False):
         assert cotan.shape[0] == self.__numel_gd
         if copy:
-            self.__cotan = cotan.clone().requires_grad_()
+            self.__cotan = cotan.detach().clone().requires_grad_()
         else:
-            self.__cotan = cotan
+            self.__cotan = cotan.requires_grad_()
 
     gd = property(__get_gd, fill_gd)
     tan = property(__get_tan, fill_tan)

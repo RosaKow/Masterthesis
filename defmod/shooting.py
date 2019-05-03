@@ -13,34 +13,60 @@ def shoot(h, it, method):
         return shoot_euler(h, it)
     else:
         return shoot_torchdiffeq(h, it, method)
+    
+    
+def shoot_euler_multishape(h, it):
+    step = 1. / it
 
+    intermediate_states = [h.module.manifold.copy()]
+    intermediate_controls = []
+    
+    for i in range(it):
+        h.geodesic_controls()
+        
+        l = [*h.module.manifold.unroll_gd(), *h.module.manifold.unroll_cotan()]
+        
+        delta = grad(h(), l, create_graph=True, allow_unused=True)
+        # TODO: is list() necessary?
+        nb_modules = int(len(delta)/4)
+        d_gd = [delta[0].view(-1), delta[1].view(-1), [delta[2].view(-1), delta[3].view(-1)]]
+        d_mom = [delta[4].view(-1), delta[5].view(-1), [delta[6].view(-1), delta[7].view(-1)]]
+        
+        
+        h.module.manifold.muladd_gd(d_mom, step)
+        h.module.manifold.muladd_cotan(d_gd, -step)
+        
+        intermediate_states.append(h.module.manifold.copy())
+        intermediate_controls.append(h.module.controls)
+        
+    final_gd = h.module.manifold
+    return  [final_gd.gd[0], final_gd.gd[1], final_gd.gd[2][0], final_gd.gd[2][1]]#, intermediate_controls
 
 def shoot_euler(h, it):
     step = 1. / it
 
     intermediate_states = [h.module.manifold.copy()]
     intermediate_controls = []
-
+    
     for i in range(it):
         h.geodesic_controls()
-        ################################
-        print(h.module[0].controls)
-        print(h.constraints(h.module))
-        constr = dm.constraints.Identity()
-        print(constr(h.module))
-        print(h.apply_constr())
 
-        #############################
         l = [*h.module.manifold.unroll_gd(), *h.module.manifold.unroll_cotan()]
         delta = grad(h(), l, create_graph=True, allow_unused=True)
         # TODO: is list() necessary?
         d_gd = h.module.manifold.roll_gd(list(delta[:int(len(delta)/2)]))
         d_mom = h.module.manifold.roll_cotan(list(delta[int(len(delta)/2):]))
+ 
         h.module.manifold.muladd_gd(d_mom, step)
         h.module.manifold.muladd_cotan(d_gd, -step)
+        
         intermediate_states.append(h.module.manifold.copy())
         intermediate_controls.append(h.module.controls)
-
+    
+    # for gradcheck
+    #final_gd = h.module.manifold
+    #return [final_gd.gd[0], final_gd.gd[1], final_gd.gd[2][0], final_gd.gd[2][1]]#, intermediate_controls
+    
     return intermediate_states, intermediate_controls
 
 

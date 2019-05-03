@@ -36,8 +36,5 @@ class Hamiltonian:
         return self.__module.manifold.inner_prod_field(self.__module.field_generator())
 
     def geodesic_controls(self):
-        print('___________')
-        print('hamiltonian')
-        print(self.__module.manifold.cotan, len(self.__module.manifold.cotan))
         self.__module.compute_geodesic_control(self.__module.manifold)
         

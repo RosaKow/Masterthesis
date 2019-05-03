@@ -88,9 +88,10 @@ class Translations(DeformationModule):
         controls, _ = torch.gesv(vs(self.manifold.gd.view(-1, self.manifold.dim)), K_q)
         self.__controls = controls.contiguous().view(-1)
         
-    def compute_geodesic_control_from_self(self):
+    def compute_geodesic_control_from_self(self, manifold):
         """ Computes geodesic control on self.manifold"""
-        self.compute_geodesic_control(self.__manifold)
+        # TODO check manifold has the same type as self.manifold
+        self.compute_geodesic_control(manifold)
 
     def field_generator(self):
         return StructuredField_0(self.__manifold.gd.view(-1, self.__manifold.dim),
@@ -223,9 +224,6 @@ class CompoundModule(DeformationModule, Iterable):
 
     def compute_geodesic_control(self, man):
         """Computes geodesic control from \delta \in H^\ast."""
-        #print('___________')
-        #print('compound comp_geo_cont')
-        #print(man.cotan, len(man.cotan))
         for i in range(self.nb_module):
             self.__module_list[i].compute_geodesic_control(man)
 
@@ -245,6 +243,7 @@ class Background(DeformationModule):
         self.__module_list = [mod.copy() for mod in module_list]
         self.__sigma = sigma
         self.__manifold = CompoundManifold([m.manifold.copy() for m in self.__module_list])
+        self.__controls = [ torch.zeros(mod.manifold.gd.shape) for mod in self.__module_list ] 
         
     @property
     def module_list(self):
@@ -261,27 +260,28 @@ class Background(DeformationModule):
     @property
     def dim_controls(self):
         # dim of shape space
-        return sum([mod.dim_gd for mod in self.__module_list])
+        return sum([mod.manifold.dim_gd for mod in self.__module_list])
     
     @property 
     def dim(self):
         return self.__module_list[0].manifold.dim
 
     def __get_controls(self):
-        return [m.controls for m in self.__module_list]
+        return self.__controls
 
     def fill_controls(self, controls, copy=False):
         assert len(controls) == self.nb_module
+        for i in range(len(controls)):
+            assert controls[i].shape == self.__module_list[i].manifold.dim_gd  
         if copy:
             for i in range(self.nb_module):
-                self.__module_list[i].fill_controls(controls[i].clone().requires_grad_())
+                self.__controls[i] = controls[i].clone().requires_grad_()
         else:
             for i in range(self.nb_module):
-                self.__module_list[i].fill_controls(controls[i])
+                self.__controls = controls
         
     def fill_controls_zero(self):
-        for m in self.__module_list:
-            m.fill_controls_zero()
+        self.__controls = [ torch.zeros(mod.manifold.gd.shape) for mod in self.__module_list ] 
             
     controls = property(__get_controls, fill_controls)
     
@@ -296,7 +296,7 @@ class Background(DeformationModule):
     
     def cost(self):
         """Returns the cost."""
-        cont = torch.cat(self.controls,0)
+        cont = torch.cat(self.__controls,0)
         K_q = self.K_q()
         m = torch.mm(K_q, cont.view(-1, self.dim))
         cost = 0.5*torch.dot(m.view(-1), cont.view(-1))
@@ -305,19 +305,19 @@ class Background(DeformationModule):
         
     def field_generator(self):
         man = self.manifold.copy()
+        man.fill_gd(self.manifold.gd)
         for i in range(len(self.module_list)):
-            man[i].fill_cotan(self.controls[i].view(-1))
+            man[i].fill_cotan(self.__controls[i].view(-1))
         return man.cot_to_vs(self.__sigma)
     
-    def compute_geodesic_control_from_self(self):
+    def compute_geodesic_control_from_self(self, manifold):
         """ assume man is of the same type and has the same gd as self.__man"""
-        self.fill_controls(self.manifold.cotan.copy())
+        # TODO: check manifold and self.manifold have the same type
+        self.fill_controls(manifold.cotan.copy())
         
     def compute_geodesic_control(self, man):
         """ assume man is of the same type and has the same gd as self.__man"""
-        # assert..
-        self.fill_controls(man.cotan.copy())
-        
+        raise NotImplementedError
         
     def autoaction(self):
         """ computes matrix for autoaction = xi zeta Z^-1 zeta^\ast xi^\ast """
