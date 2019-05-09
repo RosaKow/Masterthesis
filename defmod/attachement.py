@@ -34,7 +34,7 @@ class L2NormAttachement(Attachement):
         super().__init__()
 
     def loss(self, x, y):
-        return torch.dist(a, b)
+        return torch.dist(x.view(-1), y.view(-1))
     
 class L2NormAttachement_multi(Attachement):
     """L2 norm distance between two measures."""

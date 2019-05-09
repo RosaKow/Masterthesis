@@ -11,7 +11,7 @@ from .deformationmodules import CompoundModule
 
 class Hamiltonian_multi:
     def __init__(self, modules, constr):
-            self.__modules = modules#.copy()
+            self.__modules = modules
             self.__constr = constr
 
     @property
@@ -35,4 +35,7 @@ class Hamiltonian_multi:
         
     def apply_constr(self):
         """ Apply Constraints on the generated vectorfields"""
-        return torch.dot(self.__modules.l.view(-1,1).squeeze(), self.__constr(self.__modules).view(-1,1).squeeze())
+        appl_constr = torch.dot(self.__modules.l.view(-1,1).squeeze(), self.__constr(self.__modules).view(-1,1).squeeze())
+        #print('Hamiltonian Apply Constraints___________________________')
+        #print(appl_constr)
+        return (appl_constr)

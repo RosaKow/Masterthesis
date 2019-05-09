@@ -242,7 +242,7 @@ class Background(DeformationModule):
         super().__init__()
         self.__module_list = [mod.copy() for mod in module_list]
         self.__sigma = sigma
-        self.__manifold = CompoundManifold([m.manifold.copy() for m in self.__module_list])
+        self.__manifold = CompoundManifold([m.manifold.copy(retain_grad=True) for m in self.__module_list])
         self.__controls = [ torch.zeros(mod.manifold.gd.shape) for mod in self.__module_list ] 
         
     @property
@@ -275,7 +275,7 @@ class Background(DeformationModule):
             assert controls[i].shape == self.__module_list[i].manifold.dim_gd  
         if copy:
             for i in range(self.nb_module):
-                self.__controls[i] = controls[i].clone().requires_grad_()
+                self.__controls[i] = controls[i].clone().detach().requires_grad_()
         else:
             for i in range(self.nb_module):
                 self.__controls = controls
@@ -313,7 +313,7 @@ class Background(DeformationModule):
     def compute_geodesic_control_from_self(self, manifold):
         """ assume man is of the same type and has the same gd as self.__man"""
         # TODO: check manifold and self.manifold have the same type
-        self.fill_controls(manifold.cotan.copy())
+        self.fill_controls(manifold.cotan.copy())   
         
     def compute_geodesic_control(self, man):
         """ assume man is of the same type and has the same gd as self.__man"""
@@ -381,9 +381,10 @@ class GlobalTranslation(DeformationModule):
         self.__translationmodule.compute_geodesic_control(man) 
         self.__controls = self.__translationmodule.controls
 
-    def compute_geodesic_control_from_self(self):
+    def compute_geodesic_control_from_self(self, manifold):
         """ Computes geodesic control on self.manifold"""
-        self.compute_geodesic_control(self.__manifold)
+        # TODO: check manifold has the same type as self.manifold
+        self.compute_geodesic_control(manifold)
         
     def field_generator(self):
         return self.__translationmodule.field_generator()
@@ -394,3 +395,70 @@ class GlobalTranslation(DeformationModule):
 
         K = K_xy(torch.cat(self.manifold.gd).view(-1, self.dim), self.z, self.__sigma)
         return torch.mm(torch.transpose(K,0),K)
+
+    
+class Scaling(DeformationModule):
+    """ local scaling """
+    def __init__(self, manifold, sigma):
+        super().__init__()
+        self.__sigma = sigma
+        self.__dim = manifold.dim
+        self.__manifold = manifold
+        
+
+    @property
+    def manifold(self):
+        return self.__manifold
+
+    @property
+    def sigma(self):
+        return self.__sigma
+    
+    @property
+    def dim_controls(self):
+        return 1
+
+    def __get_controls(self):
+        return self.__controls
+
+    def fill_controls(self, control):
+        self.__controls = control
+
+    controls = property(__get_controls, fill_controls)
+    
+    def fill_controls_zero(self):
+        self.__controls = torch.zeros(1, requires_grad=True)        
+    
+    def __call__(self, points) :
+        """Applies the generated vector field on given points."""
+        # StructuredField0
+        # gd = [z, z, z]
+        # controls = [control * v1, control*v2, control*v3]
+        raise NotImplementedError
+    
+    def z(self):
+        ''' Computes the center (mean) of gd'''
+        gd = self.manifold.gd
+        if len(gd.shape) == 1:
+            gd = gd.unsqueeze(0)
+        return torch.mean(gd.view(-1,self.manifold.dim),0).view(1,self.manifold.dim)
+ 
+    def cost(self) :
+        """Returns the cost."""
+        raise NotImplementedError
+
+    def compute_geodesic_control(self, man):
+        """Computes geodesic control from StructuredField."""
+        raise NotImplementedError
+
+    def compute_geodesic_control_from_self(self, manifold):
+        """ Computes geodesic control on self.manifold"""
+        # TODO: check manifold has the same type as self.manifold
+        raise NotImplementedError
+        
+    def field_generator(self):
+        raise NotImplementedError
+    
+    def autoaction(self):
+        """ computes matrix for autoaction = xi zeta Z^-1 zeta^\ast xi^\ast """
+        raise NotImplementedError

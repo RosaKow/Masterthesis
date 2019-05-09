@@ -50,10 +50,19 @@ def shoot_euler(h, it):
     
     for i in range(it):
         h.geodesic_controls()
-
+        
+        speed_action = [gdi.action(modulei).tan for gdi, modulei in zip(h.module.manifold.manifold_list, h.module)] 
+        
         l = [*h.module.manifold.unroll_gd(), *h.module.manifold.unroll_cotan()]
         delta = grad(h(), l, create_graph=True, allow_unused=True)
         # TODO: is list() necessary?
+        
+        
+        #nb_modules = int(len(delta)/4)
+        #d_gd = [delta[0].view(-1), delta[1].view(-1), [delta[2].view(-1), delta[3].view(-1)]]
+        #d_mom = [delta[4].view(-1), delta[5].view(-1), [delta[6].view(-1), delta[7].view(-1)]]
+        
+        
         d_gd = h.module.manifold.roll_gd(list(delta[:int(len(delta)/2)]))
         d_mom = h.module.manifold.roll_cotan(list(delta[int(len(delta)/2):]))
  

@@ -16,7 +16,6 @@ class MultiShapeModule(torch.nn.Module):
         #assert isinstance(module_list)
         super().__init__()
         self.__sigma_background = sigma_background
-        ##self.__points_in_region = [*points_in_region]
         self.__module_list = [mod.copy() for mod in module_list]
         self.__background = dm.deformationmodules.Background(self.__module_list, self.__sigma_background)
         self.__module_list = [*self.__module_list, self.__background]
@@ -26,7 +25,7 @@ class MultiShapeModule(torch.nn.Module):
         self.__background.fill_controls_zero()
         
     def copy(self):
-        return MultiShapeModule([mod.copy() for mod in self.__module_list], self.__sigma_background)
+        return MultiShapeModule([mod.copy() for mod in self.__module_list[:-1]])#, self.__sigma_background)
 
     @property
     def module_list(self):
@@ -79,11 +78,16 @@ class MultiShapeModule(torch.nn.Module):
         return self.__background.controls
     
   
-    def fill_controls(self, controls):
+    def fill_controls(self, controls, copy=False, retain_grad=False):
         assert len(controls) == self.nb_module +1
-        for i in range(self.nb_module):
-            self.__module_list[i].fill_controls(controls[i])#.detach().clone().requires_grad_())
-        self.__module_list[-1].fill_controls(controls[-1])#.copy())
+        if copy:
+            for i in range(self.nb_module):
+                self.__module_list[i].__controls = controls[i].clone().detach().requires_grad_()
+            if retain_grad:
+                self.__module_list[i].__controls = controls[i].clone().requires_grad_()        
+        else:
+            for i in range(self.nb_module):
+                self.__module_list[i].__controls = controls
             
     controls = property(__get_controls, fill_controls)
 
@@ -97,7 +101,6 @@ class MultiShapeModule(torch.nn.Module):
     
     def fill_l(self, l, copy=False):
         #assert len(l) == self.nb_module
-        # used as dim: (nb_pts*dim x 1)
         if copy:
             self.__l = l.detach().clone().requires_grad_()
         else:
@@ -111,8 +114,6 @@ class MultiShapeModule(torch.nn.Module):
     def manifold(self):
         return self.__manifold
     
-    #def boollist2tensor(boollist):
-    #    return torch.tensor(np.asarray(boollist).astype(np.uint8))
 
     def __call__(self, points) :
         """Applies the generated vector field on given points."""
@@ -152,19 +153,12 @@ class MultiShapeModule(torch.nn.Module):
         B = torch.mm(constr_mat, torch.cat( [*gd_moved[:-1], *gd_moved[-1]]).view(-1,1))
         
         #trying to make it more general
-
         #gd_action = [man.action(mod).tan for mod,man in zip(self.module_list, self.manifold)]
         #gd2 = self.action_on_self().tan
 
 
-        B1 = torch.mm(constr_mat, dm.multimodule_usefulfunctions.gdlist2tensor(gd_moved).view(-1,1))
-      
-        #print(gd_moved)
-        #print(gd_action)
-        #print(gd2)
-        #print('____________')
-        #############################
-        
+        #B1 = torch.mm(constr_mat, dm.multimodule_usefulfunctions.gdlist2tensor(gd_moved).view(-1,1))
+             
         A = torch.mm(torch.mm(constr_mat, self.autoaction()), torch.transpose(constr_mat,0,1))
                 
         lambda_qp,_ = torch.gesv(B, A)
@@ -173,7 +167,8 @@ class MultiShapeModule(torch.nn.Module):
         p = torch.cat([*self.manifold.cotan[:-1], *self.manifold.cotan[-1]],0).view(-1,1) # cotan 2 
         cotan = dm.multimodule_usefulfunctions.gdtensor2list((p - torch.mm(torch.transpose(constr_mat,0,1), lambda_qp)).view(-1), self.numel_gd[:-1])
         
-        man = self.manifold.copy()
+        man = self.manifold.copy(retain_grad=True)
+        
         man.cotan = cotan
         self.compute_geodesic_control_from_self(man)
         h_qp = self.controls

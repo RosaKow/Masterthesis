@@ -47,9 +47,9 @@ class Landmarks(Manifold):
         if isinstance(cotan, torch.Tensor):
             self.fill_cotan(cotan.requires_grad_(), copy=False)
 
-    def copy(self):
+    def copy(self, retain_grad=False):
         out = Landmarks(self.__dim, self.__nb_pts)
-        out.fill(self, copy=True)
+        out.fill(self, copy=True, retain_grad=retain_grad)
         return out
 
     @property
@@ -99,30 +99,38 @@ class Landmarks(Manifold):
     def __get_cotan(self):
         return self.__cotan
 
-    def fill(self, manifold, copy=False):
+    def fill(self, manifold, copy=False, retain_grad=False):
+        #print(manifold)
+        #print(isinstance(manifold, Landmarks))
         assert isinstance(manifold, Landmarks)
-        self.fill_gd(manifold.gd, copy=copy)
-        self.fill_tan(manifold.tan, copy=copy)
-        self.fill_cotan(manifold.cotan, copy=copy)
+        self.fill_gd(manifold.gd, copy=copy, retain_grad=retain_grad)
+        self.fill_tan(manifold.tan, copy=copy, retain_grad=retain_grad)
+        self.fill_cotan(manifold.cotan, copy=copy, retain_grad=retain_grad)
 
-    def fill_gd(self, gd, copy=False):
+    def fill_gd(self, gd, copy=False, retain_grad=False):
         assert gd.shape[0] == self.__numel_gd
         if copy:
             self.__gd = gd.detach().clone().requires_grad_()
+            if retain_grad:
+                self.__gd = gd.clone().requires_grad_()
         else:
             self.__gd = gd.requires_grad_()
 
-    def fill_tan(self, tan, copy=False):
+    def fill_tan(self, tan, copy=False, retain_grad=False):
         assert tan.shape[0] == self.__numel_gd
         if copy:
             self.__tan = tan.detach().clone().requires_grad_()
+            if retain_grad:
+                self.__tan = tan.clone().requires_grad_()
         else:
             self.__tan = tan.requires_grad_()
 
-    def fill_cotan(self, cotan, copy=False):
+    def fill_cotan(self, cotan, copy=False, retain_grad=False):
         assert cotan.shape[0] == self.__numel_gd
         if copy:
             self.__cotan = cotan.detach().clone().requires_grad_()
+            if retain_grad:
+                self.__cotan = cotan.clone().requires_grad_()
         else:
             self.__cotan = cotan.requires_grad_()
 
@@ -260,11 +268,11 @@ class Stiefel(Manifold):
     def __get_cotan(self):
         return self.__cotan
 
-    def fill(self, manifold, copy=False):
+    def fill(self, manifold, copy=False,retain_grad=False):
         assert isinstance(manifold, Stiefel)
-        self.fill_gd(manifold.gd, copy=copy)
-        self.fill_tan(manifold.tan, copy=copy)
-        self.fill_cotan(manifold.cotan, copy=copy)
+        self.fill_gd(manifold.gd, copy=copy, retain_grad=retain_grad)
+        self.fill_tan(manifold.tan, copy=copy, retain_grad=retain_grad)
+        self.fill_cotan(manifold.cotan, copy=copy, retain_grad=retain_grad)
 
     def fill_gd(self, gd, copy=False):
         assert isinstance(gd, Iterable) and (len(gd) == 2) and (gd[0].numel() == self.__numel_gd_points) and (gd[1].numel() == self.__numel_gd_mat)
@@ -274,6 +282,7 @@ class Stiefel(Manifold):
             self.__gd = (gd[0].detach().clone().requires_grad_(),
                          gd[1].detach().clone().requires_grad_())
 
+
     def fill_tan(self, tan, copy=False):
         assert isinstance(tan, Iterable) and (len(tan) == 2) and (tan[0].numel() == self.__numel_gd_points) and (tan[1].numel() == self.__numel_gd_mat)
         if not copy:
@@ -282,6 +291,7 @@ class Stiefel(Manifold):
             self.__tan = (tan[0].detach().clone().requires_grad_(),
                           tan[1].detach().clone().requires_grad_())
 
+
     def fill_cotan(self, cotan, copy=False):
         assert isinstance(cotan, Iterable) and (len(cotan) == 2) and (cotan[0].numel() == self.__numel_gd_points) and (cotan[1].numel() == self.__numel_gd_mat)
         if not copy:
@@ -289,6 +299,7 @@ class Stiefel(Manifold):
         else:
             self.__cotan = (cotan[0].detach().clone().requires_grad_(),
                             cotan[1].detach().clone().requires_grad_())
+
 
     gd = property(__get_gd, fill_gd)
     tan = property(__get_tan, fill_tan)
@@ -352,8 +363,17 @@ class CompoundManifold(Manifold):
         self.__len_gd = sum([m.len_gd for m in self.__manifold_list])
         self.__dim_gd = tuple(sum((m.dim_gd for m in self.__manifold_list), ()))
 
-    def copy(self):
-        manifold_list = [m.copy() for m in self.__manifold_list]
+    def copy(self, retain_grad=False):
+        #print('manifold.copy___________________')
+        #print(self.__manifold_list)
+        #print(len(self.__manifold_list))
+        manifold_list = []
+        for i in range(len(self.__manifold_list)):
+        #    print(i)
+            manifold_list.append(self.manifold_list[i].copy(retain_grad))
+        #    print('copied')
+        #manifold_list = [m.copy() for m in self.__manifold_list]
+        #print('man_list',manifold_list)
         return CompoundManifold(manifold_list)
 
     @property
@@ -402,14 +422,16 @@ class CompoundManifold(Manifold):
 
     def roll_gd(self, l):
         """Unflattens the list into one suitable for fill_gd() or all *_gd() numerical operations."""
+        out = []
         for man in self.__manifold_list:
-            l.append(man.roll_gd(l))
-        return l
+            out.append(man.roll_gd(l))
+        return out
 
     def roll_cotan(self, l):
+        out = []
         for man in self.__manifold_list:
-            l.append(man.roll_cotan(l))
-        return l
+            out.append(man.roll_cotan(l))
+        return out
 
     def __get_gd(self):
         return [m.gd for m in self.__manifold_list]
@@ -420,22 +442,22 @@ class CompoundManifold(Manifold):
     def __get_cotan(self):
         return [m.cotan for m in self.__manifold_list]
 
-    def fill(self, manifold, copy=False):
-        self.fill_gd(manifold.gd, copy=copy)
-        self.fill_tan(manifold.tan, copy=copy)
-        self.fill_cotan(manifold.cotan, copy=copy)
+    def fill(self, manifold, copy=False, retain_grad=False):
+        self.fill_gd(manifold.gd, copy=copy, retain_grad=retain_grad)
+        self.fill_tan(manifold.tan, copy=copy, retain_grad=retain_grad)
+        self.fill_cotan(manifold.cotan, copy=copy, retain_grad=retain_grad)
 
-    def fill_gd(self, gd, copy=False):
+    def fill_gd(self, gd, copy=False, retain_grad=False):
         for i in range(len(self.__manifold_list)):
-            self.__manifold_list[i].fill_gd(gd[i], copy=copy)
+            self.__manifold_list[i].fill_gd(gd[i], copy=copy, retain_grad=retain_grad)
 
-    def fill_tan(self, tan, copy=False):
+    def fill_tan(self, tan, copy=False, retain_grad=False):
         for i in range(len(self.__manifold_list)):
-            self.__manifold_list[i].fill_tan(tan[i], copy=copy)
+            self.__manifold_list[i].fill_tan(tan[i], copy=copy, retain_grad=retain_grad)
 
-    def fill_cotan(self, cotan, copy=False):
+    def fill_cotan(self, cotan, copy=False, retain_grad=False):
         for i in range(len(self.__manifold_list)):
-            self.__manifold_list[i].fill_cotan(cotan[i], copy=copy)
+            self.__manifold_list[i].fill_cotan(cotan[i], copy=copy, retain_grad=retain_grad)
            
 
     gd = property(__get_gd, fill_gd)
