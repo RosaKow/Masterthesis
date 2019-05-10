@@ -8,7 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import geomloss
 
-from .deformationmodules import SilentPoints, Translations, CompoundModule
+from .deformationmodules import SilentPoints, Translations, CompoundModule, Background
 from .manifold import Landmarks
 from .hamiltonian import Hamiltonian
 from .shooting import shoot, shoot_euler
@@ -167,18 +167,6 @@ class ModelCompound(Model):
         return vec2grid(grid_landmarks.gd.view(-1, 2).detach(), grid_resolution[0], grid_resolution[1])
     
     
-    ###################################
-    def test(self):
-        
-        compound = CompoundModule(self.modules)
-        compound.manifold.fill(self.init_manifold)
-        h = Hamiltonian(compound)
-        shoot(h, 5, "torch_euler")
-        
-        shot_manifold = compound.manifold.copy(retain_grad=True)
-        return [shot_manifold.gd[0], shot_manifold.gd[1], shot_manifold.gd[2]]
-    #####################################
-    
 class ModelCompoundWithPointsRegistration(ModelCompound):
     def __init__(self, source, module_list, fixed, attachement):
         self.alpha = source[1]
@@ -239,12 +227,12 @@ class ModelCompoundImageRegistration(ModelCompound):
 
 
     
-    
-class ModelMultishapePointsRegistration(Model):
+class ModelMultishape(Model):
     def __init__(self, source, module_list, sigma_bg, attachement, constr):
-        
+        super().__init__(attachement)
+    
         self.__module_list = module_list
-        self.__init_manifold = MultiShapeModule(module_list).manifold.copy()#retain_grad=True)
+        self.__init_manifold = MultiShapeModule(module_list).manifold.copy()
         self.__sigma_bg = sigma_bg
         self.__constr = constr
         
@@ -252,7 +240,6 @@ class ModelMultishapePointsRegistration(Model):
         for i in range(len(module_list) + 1):
             self.__parameters.extend(self.__init_manifold[i].unroll_cotan())
             
-        super().__init__(attachement)
         
     @property
     def constraints(self):
@@ -261,26 +248,60 @@ class ModelMultishapePointsRegistration(Model):
     @property
     def parameters(self):
         return self.__parameters
+    
+    @property
+    def init_manifold(self):
+        return self.__init_manifold
+    
+    @property
+    def sigma_bg(self):
+        return self.__sigma_bg
+    
+    @property
+    def module_list(self):
+        return self.__module_list
+    
+    def compute_deformation_grid(self, grid_origin, grid_size, grid_resolution, it=2, intermediate=False):
+        x, y = torch.meshgrid([
+            torch.linspace(grid_origin[0], grid_origin[0]+grid_size[0], grid_resolution[0]),
+            torch.linspace(grid_origin[1], grid_origin[1]+grid_size[1], grid_resolution[1])])
 
+        gridpos = grid2vec(x, y)
+
+        grid_landmarks = Landmarks(2, gridpos.shape[0], gd=gridpos.view(-1))
+        grid_silent = SilentPoints(grid_landmarks)
+        
+        boundary_labels = [np.zeros(grid_landmarks.nb_pts), *[np.ones(mod.manifold.nb_pts) for mod in self.__module_list]]
+        
+        intermediate = shoot_euler(Hamiltonian_multi(MultiShapeModule([grid_silent, *self.__module_list], boundary_labels), self.__constr), it=10)
+        
+        grid_list = vec2grid(grid_landmarks.gd.view(-1, 2).detach(), grid_resolution[0], grid_resolution[1])
+
+        return grid_list
+
+    
+    
+class ModelMultishapePointsRegistration(ModelMultishape):
+    def __init__(self, source, module_list, sigma_bg, attachement, constr):
+        super().__init__( source, module_list, sigma_bg, attachement, constr)
+       
+    
     def compute(self, target):
-        modules = MultiShapeModule(self.__module_list, self.__sigma_bg)
-        modules.manifold.fill(self.__init_manifold)
-        h = Hamiltonian_multi(modules, self.__constr)
+        modules = MultiShapeModule(self.module_list, self.sigma_bg)
+        modules.manifold.fill(self.init_manifold)
+        h = Hamiltonian_multi(modules, self.constraints)
         shoot_euler(h, 10)
         
         #TODO: use roll function here
         self.__shot_points = [*[gd.view(-1, 2) for gd in modules.manifold.gd[:-1]], [gd.view(-1, 2) for gd in modules.manifold.gd[-1]]]
-        print('constraints___________________')
-        print(self.__constr(modules))
-        #print('-------------------------------------------')
-        #print(h.constraints(h.module)-self.__constr(modules))
+       
+        #print('constraints___________________')
+        #modules.compute_geodesic_variables(self.__constr)
+        #print(self.__constr(modules))
+        
         self.shot_manifold = modules.manifold.copy(retain_grad=True)
         self.deformation_cost = modules.cost()
         self.attach = self.attachement(self.__shot_points, target)
-        
-        #print('' '''''''''''''''''''''''''' '')
-        #print(h.module.manifold.gd[2][0])
-        #print(self.__shot_points[2][0])
 
     def __call__(self):
 

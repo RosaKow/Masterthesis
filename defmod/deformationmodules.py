@@ -10,7 +10,7 @@ from .manifold import Landmarks, CompoundManifold
 
 from .usefulfunctions import make_grad_graph
 
-from .multimodule_usefulfunctions import kronecker_I2
+from .multimodule_usefulfunctions import kronecker_I2, CirclePoints
 
 
 
@@ -89,7 +89,7 @@ class Translations(DeformationModule):
         self.__controls = controls.contiguous().view(-1)
         
     def compute_geodesic_control_from_self(self, manifold):
-        """ Computes geodesic control on self.manifold"""
+        """ Computes geodesic control on manifold of same type as self.manifold"""
         # TODO check manifold has the same type as self.manifold
         self.compute_geodesic_control(manifold)
 
@@ -146,6 +146,9 @@ class SilentPoints(DeformationModule):
 
     def compute_geodesic_control(self, man):
         """Computes geodesic control from StructuredField vs. For SilentPoints, does nothing."""
+        pass
+    
+    def compute_geodesic_control_from_self(self, man):
         pass
 
     def field_generator(self):
@@ -237,13 +240,29 @@ class CompoundModule(DeformationModule, Iterable):
     
 class Background(DeformationModule):
     """ Creates the background module for the multishape framework"""
-    def __init__(self, module_list, sigma):
+    def __init__(self, module_list, sigma, boundary_labels=None):
         import copy
         super().__init__()
+        
         self.__module_list = [mod.copy() for mod in module_list]
+        self.__boundary_labels = boundary_labels
+
+        if (boundary_labels==None):
+            self.__manifold = CompoundManifold([m.manifold.copy(retain_grad=True) for m in self.__module_list]) 
+        
+        else:### for boundary labels:
+            man_list = []
+            dim = module_list[0].manifold.dim
+            for mod, label in zip(module_list, boundary_labels):
+                if isinstance(mod.manifold, Landmarks):
+                    gd = mod.manifold.gd.view(-1,2)[np.where(label==1)[0].tolist(),:]
+                    man_list.append(Landmarks(dim, len(gd), gd.view(-1)))
+                else:
+                    raise NotImplementedError
+            self.__manifold = CompoundManifold(man_list)
+            
+        self.__controls = [ torch.zeros(man.gd.shape) for man in self.__manifold.manifold_list ] 
         self.__sigma = sigma
-        self.__manifold = CompoundManifold([m.manifold.copy(retain_grad=True) for m in self.__module_list])
-        self.__controls = [ torch.zeros(mod.manifold.gd.shape) for mod in self.__module_list ] 
         
     @property
     def module_list(self):
@@ -259,8 +278,10 @@ class Background(DeformationModule):
     
     @property
     def dim_controls(self):
-        # dim of shape space
-        return sum([mod.manifold.dim_gd for mod in self.__module_list])
+        if self.__boundary_labels==None:
+            return sum([mod.manifold.dim_gd for mod in self.__module_list])
+        else: 
+            return sum([np.sum(labels) for labels in self.__boundary_labels])
     
     @property 
     def dim(self):
@@ -272,7 +293,12 @@ class Background(DeformationModule):
     def fill_controls(self, controls, copy=False):
         assert len(controls) == self.nb_module
         for i in range(len(controls)):
-            assert controls[i].shape == self.__module_list[i].manifold.dim_gd  
+            if self.__boundary_labels == None:
+                assert controls[i].shape == self.__module_list[i].manifold.dim_gd  
+            else: 
+                print('controls shape', controls[i].shape)
+                print('boundary', np.sum(self.__boundary_labels[i]))
+                assert controls[i].shape == self.manifold.dim * np.sum(self.__boundary_labels[i])
         if copy:
             for i in range(self.nb_module):
                 self.__controls[i] = controls[i].clone().detach().requires_grad_()
@@ -404,8 +430,14 @@ class Scaling(DeformationModule):
         self.__sigma = sigma
         self.__dim = manifold.dim
         self.__manifold = manifold
-        
+        self.__scalvec = CirclePoints([0,0], 1, 3)
+        self.__controls = torch.tensor(1., requires_grad=True)
 
+        
+    @property
+    def scal_vec(self):
+        return self.__scalvec
+    
     @property
     def manifold(self):
         return self.__manifold
@@ -431,10 +463,7 @@ class Scaling(DeformationModule):
     
     def __call__(self, points) :
         """Applies the generated vector field on given points."""
-        # StructuredField0
-        # gd = [z, z, z]
-        # controls = [control * v1, control*v2, control*v3]
-        raise NotImplementedError
+        return self.field_generator()(points)
     
     def z(self):
         ''' Computes the center (mean) of gd'''
@@ -445,6 +474,7 @@ class Scaling(DeformationModule):
  
     def cost(self) :
         """Returns the cost."""
+        # return self.__controls
         raise NotImplementedError
 
     def compute_geodesic_control(self, man):
@@ -457,7 +487,13 @@ class Scaling(DeformationModule):
         raise NotImplementedError
         
     def field_generator(self):
-        raise NotImplementedError
+        """  """
+        # Not working! why does it return zero?
+        z = self.z()
+        vectors = self.__controls * (self.__scalvec + z)
+        support = z * torch.ones(vectors.shape)
+        return StructuredField_0(support.view(-1, self.__manifold.dim),
+                                 vectors.view(-1, self.__manifold.dim), self.__sigma), support, vectors
     
     def autoaction(self):
         """ computes matrix for autoaction = xi zeta Z^-1 zeta^\ast xi^\ast """

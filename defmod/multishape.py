@@ -12,12 +12,12 @@ class MultiShapeModule(torch.nn.Module):
                List of functions taking points as input, that check if the module acts on the point.
                sigma_backgroud
         Creates background module with sigma_background"""
-    def __init__(self, module_list, sigma_background=0.5):
+    def __init__(self, module_list, sigma_background=0.5, boundary_labels=None):
         #assert isinstance(module_list)
         super().__init__()
         self.__sigma_background = sigma_background
         self.__module_list = [mod.copy() for mod in module_list]
-        self.__background = dm.deformationmodules.Background(self.__module_list, self.__sigma_background)
+        self.__background = dm.deformationmodules.Background(self.__module_list, self.__sigma_background, boundary_labels)
         self.__module_list = [*self.__module_list, self.__background]
         self.__manifold_list = [m.manifold for m in self.__module_list]
         self.__manifold = CompoundManifold(self.__manifold_list)

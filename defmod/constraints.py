@@ -17,8 +17,6 @@ class Identity(Constraints):
         gd are assumed to be flattened"""
         super().__init__()
        
-        
-
     def constraintsmatrix(self, modules):
         """ Matrix that corresponds to the function g in C = g xi """
         n = modules.manifold.gd[0].shape[0]
@@ -40,10 +38,24 @@ class Identity(Constraints):
         constr = torch.tensor([])
         fields = modules.field_generator()
         field_bg = fields[-1]
+        
         for i in range(len(modules.module_list) -1):
             gd_bg = modules.manifold.manifold_list[-1].manifold_list[i].gd
-            constr = torch.cat([constr, fields[i](modules.manifold.gd[i].view(-1,modules.manifold.dim)) - field_bg(gd_bg.view(-1,modules.manifold.dim))], 0)
-            #print(fields[i](modules.manifold.gd[i].view(-1,modules.manifold.dim)))
-            #print(field_bg(gd_bg.view(-1,modules.manifold.dim)))
-        #print('constr',constr)
+            constr = torch.cat([constr, fields[i](modules.manifold.gd[i].view(-1,modules.manifold.dim)) 
+                                - field_bg(gd_bg.view(-1,modules.manifold.dim))], 0)
+            
         return constr
+
+    
+class Null(Constraints):
+    """ applying no constraints, setting constraints value to zero """
+    def __init__(self):
+        super().__init__()
+        
+    def constraintsmatrix(self, modules):
+        N = sum([gd.view(-1).shape[0] for gd in modules.manifold.gd[:-1]])
+        return torch.zeros(N, 2*N)
+    
+    def __call__(self, modules):
+        N = sum([gd.view(-1).shape[0] for gd in modules.manifold.gd[:-1]])
+        return torch.zeros(N).view(-1, modules.manifold.dim)
