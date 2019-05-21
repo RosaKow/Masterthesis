@@ -296,8 +296,8 @@ class ModelMultishapePointsRegistration(ModelMultishape):
         self.__shot_points = [*[gd.view(-1, 2) for gd in modules.manifold.gd[:-1]], [gd.view(-1, 2) for gd in modules.manifold.gd[-1]]]
        
         #print('constraints___________________')
-        #modules.compute_geodesic_variables(self.__constr)
-        #print(self.__constr(modules))
+        #modules.compute_geodesic_variables(self.constraints)
+        #print(self.constraints(modules))
         
         self.shot_manifold = modules.manifold.copy(retain_grad=True)
         self.deformation_cost = modules.cost()

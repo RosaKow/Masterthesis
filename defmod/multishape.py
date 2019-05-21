@@ -115,10 +115,12 @@ class MultiShapeModule(torch.nn.Module):
         return self.__manifold
     
 
-    def __call__(self, points) :
+    def __call__(self, points, label) :
         """Applies the generated vector field on given points."""
+        ## TODO: apply field generator corresponding to label of point
         vs = self.field_generator()
-        return vs(points)
+        
+        raise NotImplementedError
     
     
     def field_generator(self):
@@ -148,8 +150,13 @@ class MultiShapeModule(torch.nn.Module):
         self.compute_geodesic_control_from_self(self.manifold)
         fields = self.field_generator()
         constr_mat = constr.constraintsmatrix(self)
+                
+        gd_moved = [f( dm.multimodule_usefulfunctions.pointslist_reshape(man.unroll_gd(), [-1,self.__manifold.dim])) for f,man in zip(fields, self.manifold.manifold_list)]
         
-        gd_moved = [f(p) for f,p in zip(fields, dm.multimodule_usefulfunctions.gdlist_reshape(self.manifold.gd, [-1,self.__manifold.dim]))]
+        print(self.manifold.numel_gd)
+        man = self.manifold.copy()
+        man.fill_gd(gd_moved)
+        print(man.unroll_gd())
         B = torch.mm(constr_mat, torch.cat( [*gd_moved[:-1], *gd_moved[-1]]).view(-1,1))
         
         #trying to make it more general

@@ -19,7 +19,7 @@ def armijo(E, gradE, energy, X):
         alpha *= p
     return alpha
 
-def gill_murray_wright(E, Enew, gradE,X, Xnew, k, kmax = 50):
+def gill_murray_wright(E, Enew, gradE,X, Xnew, k, kmax = 500):
     """ Convergence Criteria of Gill, Murray, Wright """
     tau = 10**-8
     eps = 10**-8
@@ -31,6 +31,7 @@ def gill_murray_wright(E, Enew, gradE,X, Xnew, k, kmax = 50):
     cond4 = norm(gradE)<eps
     cond5 = k >= kmax
     if (cond1 and cond2 and cond3) or cond4 or cond5 or cond0:
+        print('Condition 0:', cond0)
         print('Condition 1, 2, 3:',cond1, cond2, cond3)
         print ('Contition 4:', cond4)
         print('Condition 5:', cond5)
@@ -45,19 +46,33 @@ def gradientdescent( EnergyFunctional , X):
     [gd, mom] = X
     k = 0
     convergence = False
+    alpha = 0.1
+    
+    Enew = energy(gd, mom)
+    print(" iter : {}  ,total energy: {}".format(k, Enew))
+    
+
     
     while convergence == False:
         gradE = energygradient(gd, mom)    
-        E = energy(gd, mom)
+        E = Enew
+        
+       # alpha = armijo(E, gradE, energy, X) 
+        
+        for i in range(20):                  
+            momnew = mom - alpha*gradE
+            Enew = energy(gd, momnew)
+            
+            if Enew < E:
+                alpha = alpha*1.5
+            else:
+                alpha = alpha*0.5
 
-        alpha = 0.1 #armijo(E, gradE, energy, [gd, mom])
-        momnew = mom - alpha*gradE
-        
-        Enew = energy(gd, momnew)
-        
+    
         print(" iter : {}  ,total energy: {}".format(k, Enew))
         convergence = gill_murray_wright(E, Enew, gradE, [gd, mom], [gd, momnew], k)
-        mom = momnew.detach().requires_grad_()
+        if convergence == False:
+            mom = momnew.detach().requires_grad_()
         k+=1
         
     print(" iter : {}  ,total energy: {}".format(k, Enew))
@@ -74,7 +89,7 @@ class EnergyFunctional():
         self.Constr = Constr
         self.target = target
         self.dim = dim
-        self.nb_pts = [len(target[0]), len(target[1])]
+        self.nb_pts = [modules.module_list[0].manifold.nb_pts, modules.module_list[1].manifold.nb_pts]
         self.gamma = gamma
         
     @property
@@ -125,7 +140,7 @@ class EnergyFunctional():
                 
         cost = self.cost()
         attach = self.attach(self.target)
-        #print('cost:', cost, 'attach:', attach, 'gamma:', self.gamma, 'total:', self.gamma*cost + attach)
+        print('cost:', self.gamma * cost.detach().numpy(), 'attach:', attach.detach().numpy())
         
         return self.gamma*cost + attach
         
@@ -145,7 +160,7 @@ class EnergyFunctional():
     
     def gradE(self, gd0_tensor, mom0_tensor):
         E = self.energy_tensor(gd0_tensor, mom0_tensor)
-        E.backward()
+        E.backward(create_graph = True)
         grad = mom0_tensor.grad
         #mom0_tensor.grad.data.zero_()         <- doesn't seem to be needed
         return grad

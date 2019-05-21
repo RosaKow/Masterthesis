@@ -364,16 +364,10 @@ class CompoundManifold(Manifold):
         self.__dim_gd = tuple(sum((m.dim_gd for m in self.__manifold_list), ()))
 
     def copy(self, retain_grad=False):
-        #print('manifold.copy___________________')
-        #print(self.__manifold_list)
-        #print(len(self.__manifold_list))
         manifold_list = []
         for i in range(len(self.__manifold_list)):
-        #    print(i)
             manifold_list.append(self.manifold_list[i].copy(retain_grad))
-        #    print('copied')
         #manifold_list = [m.copy() for m in self.__manifold_list]
-        #print('man_list',manifold_list)
         return CompoundManifold(manifold_list)
 
     @property

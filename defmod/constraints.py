@@ -19,10 +19,10 @@ class Identity(Constraints):
        
     def constraintsmatrix(self, modules):
         """ Matrix that corresponds to the function g in C = g xi """
-        n = modules.manifold.gd[0].shape[0]
+        n = modules.manifold.numel_gd
         G = torch.eye(n)
         for i in range(len(modules.module_list)-2):
-            ni = modules.manifold.gd[i+1].shape[0]
+            ni = modules.manifold.numel_gd
             G = torch.cat([torch.cat([G, torch.zeros(n, ni)], 1), torch.cat([torch.zeros(ni, n), torch.eye(ni)], 1)], 0)
             n = n + ni
         G = torch.cat( [G, -torch.eye(n)], 1)   
