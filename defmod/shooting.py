@@ -55,13 +55,7 @@ def shoot_euler(h, it):
         
         l = [*h.module.manifold.unroll_gd(), *h.module.manifold.unroll_cotan()]
         delta = grad(h(), l, create_graph=True, allow_unused=True)
-        # TODO: is list() necessary?
-        
-        
-        #nb_modules = int(len(delta)/4)
-        #d_gd = [delta[0].view(-1), delta[1].view(-1), [delta[2].view(-1), delta[3].view(-1)]]
-        #d_mom = [delta[4].view(-1), delta[5].view(-1), [delta[6].view(-1), delta[7].view(-1)]]
-        
+        # TODO: is list() necessary?      
         
         d_gd = h.module.manifold.roll_gd(list(delta[:int(len(delta)/2)]))
         d_mom = h.module.manifold.roll_cotan(list(delta[int(len(delta)/2):]))
@@ -71,13 +65,35 @@ def shoot_euler(h, it):
         
         intermediate_states.append(h.module.manifold.copy())
         intermediate_controls.append(h.module.controls)
-    
-    # for gradcheck
-    #final_gd = h.module.manifold
-    #return [final_gd.gd[0], final_gd.gd[1], final_gd.gd[2][0], final_gd.gd[2][1]]#, intermediate_controls
-    
+      
     return intermediate_states, intermediate_controls
 
+
+def shoot_euler_source(h, source, it):
+    step = 1. / it
+
+    intermediate_states = [h.module.manifold.copy()]
+    intermediate_controls = []
+    
+    for i in range(it):
+        h.geodesic_controls()
+
+        speed_action = [gdi.action(modulei).tan for gdi, modulei in zip(h.module.manifold.manifold_list, h.module)] 
+        
+        l = [*h.module.manifold.unroll_gd(), *h.module.manifold.unroll_cotan()]
+        delta = grad(h(), l, create_graph=True, allow_unused=True)
+        # TODO: is list() necessary?      
+        
+        d_gd = h.module.manifold.roll_gd(list(delta[:int(len(delta)/2)]))
+        d_mom = h.module.manifold.roll_cotan(list(delta[int(len(delta)/2):]))
+ 
+        h.module.manifold.muladd_gd(d_mom, step)
+        h.module.manifold.muladd_cotan(d_gd, -step)
+        
+        intermediate_states.append(h.module.manifold.copy())
+        intermediate_controls.append(h.module.controls)
+        
+    return intermediate_states, intermediate_controls
 
 def shoot_euler_controls(h, controls, it):
     assert len(controls) == it

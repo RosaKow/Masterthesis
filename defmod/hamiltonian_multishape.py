@@ -31,11 +31,9 @@ class Hamiltonian_multi:
     #sum([mod.manifold.inner_prod_module(mod) for mod in self.__modules])
 
     def geodesic_controls(self):
-        self.__modules.compute_geodesic_variables(self.__constr)
+        self.__modules.compute_geodesic_variables_silent(self.__constr)
         
     def apply_constr(self):
         """ Apply Constraints on the generated vectorfields"""
         appl_constr = torch.dot(self.__modules.l.view(-1,1).squeeze(), self.__constr(self.__modules).view(-1,1).squeeze())
-        #print('Hamiltonian Apply Constraints___________________________')
-        #print(appl_constr)
         return (appl_constr)

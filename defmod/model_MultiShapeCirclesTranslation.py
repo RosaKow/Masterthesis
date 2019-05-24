@@ -1,7 +1,7 @@
 import torch
 import multimodule_usefulfunctions as mm 
 import numpy as np
-from defmod.shooting import shoot_euler
+from defmod.shooting import shoot_euler, shoot_euler_source
 from defmod.attachement import L2NormAttachement_multi, L2NormAttachement
 
 
@@ -19,9 +19,9 @@ def armijo(E, gradE, energy, X):
         alpha *= p
     return alpha
 
-def gill_murray_wright(E, Enew, gradE,X, Xnew, k, kmax = 500):
+def gill_murray_wright(E, Enew, gradE,X, Xnew, k, kmax = 50):
     """ Convergence Criteria of Gill, Murray, Wright """
-    tau = 10**-8
+    tau = 10**-9
     eps = 10**-8
     norm = torch.norm
     cond0 = E < Enew
@@ -35,13 +35,13 @@ def gill_murray_wright(E, Enew, gradE,X, Xnew, k, kmax = 500):
         print('Condition 1, 2, 3:',cond1, cond2, cond3)
         print ('Contition 4:', cond4)
         print('Condition 5:', cond5)
-        return True
-    return False
+        return cond0, cond1
+    return cond0, cond1
 
 def gradientdescent( EnergyFunctional , X):
     
     energy = EnergyFunctional.energy_tensor
-    energygradient = EnergyFunctional.gradE
+    energygradient = EnergyFunctional.gradE_autograd
     
     [gd, mom] = X
     k = 0
@@ -49,30 +49,40 @@ def gradientdescent( EnergyFunctional , X):
     alpha = 0.1
     
     Enew = energy(gd, mom)
-    print(" iter : {}  ,total energy: {}".format(k, Enew))
-    
+    E = Enew
+    print(" iter : {}  ,total energy: {}".format(k, Enew.detach().numpy()))
+    c=0
 
     
     while convergence == False:
         gradE = energygradient(gd, mom)    
-        E = Enew
+        
         
        # alpha = armijo(E, gradE, energy, X) 
         
-        for i in range(20):                  
-            momnew = mom - alpha*gradE
-            Enew = energy(gd, momnew)
-            
-            if Enew < E:
-                alpha = alpha*1.5
-            else:
-                alpha = alpha*0.5
-
-    
-        print(" iter : {}  ,total energy: {}".format(k, Enew))
-        convergence = gill_murray_wright(E, Enew, gradE, [gd, mom], [gd, momnew], k)
-        if convergence == False:
+                        
+        momnew = mom - alpha*gradE
+        Enew = energy(gd, momnew)
+        cond0, cond1 = gill_murray_wright(E, Enew, gradE, [gd, mom], [gd, momnew], k)
+        
+        if cond0 == True:
+            alpha = alpha*0.5
+            c = c+1
+        elif cond1 == True:
+            alpha = alpha*1.5
+            E = Enew
             mom = momnew.detach().requires_grad_()
+            c = c+1
+        else:
+            alpha = alpha*1.2
+            E = Enew
+            mom = momnew.detach().requires_grad_()
+            c = 0
+        print('c', c)
+    
+        print(" iter : {}  ,total energy: {}".format(k, Enew.detach().numpy()))
+        if c == 5 or k == 50:
+            convergence = True
         k+=1
         
     print(" iter : {}  ,total energy: {}".format(k, Enew))
@@ -82,11 +92,12 @@ def gradientdescent( EnergyFunctional , X):
 ############################################
 
 class EnergyFunctional():
-    def __init__(self, modules, h, Constr, target, dim=2, gamma=1):
+    def __init__(self, modules, h, Constr, source, target, dim=2, gamma=1):
         super().__init__()
         self.__modules = modules
         self.h = h
         self.Constr = Constr
+        self.source = source
         self.target = target
         self.dim = dim
         self.nb_pts = [modules.module_list[0].manifold.nb_pts, modules.module_list[1].manifold.nb_pts]
@@ -95,51 +106,31 @@ class EnergyFunctional():
     @property
     def modules(self):
         return self.__modules
-    
-    
         
-    def attach(self, target):
-        return L2NormAttachement()(self.modules.manifold.gd[0], target[0]) + L2NormAttachement()(self.modules.manifold.gd[1], target[1]) + L2NormAttachement()(self.modules.manifold.gd[2][0], target[0]) + L2NormAttachement()(self.modules.manifold.gd[2][1], target[1])
+    def attach(self):
+        return sum([L2NormAttachement()( self.modules.module_list[i][0].manifold.gd, self.target[i]) 
+                    #+ L2NormAttachement()( self.modules.module_list[-1], self.target[i])
+                    for i in range(len(self.target))])
         
     def cost(self):   
         return self.modules.cost()
-    
-    
-    def shoot(self):
-        
-        intermediate_states, intermediate_controls = shoot_euler(self.h, it=10)
-        
-        return intermediate_states, intermediate_controls
-    
-    def test(self, gd0, mom0):
-        
-        gd0_list = self.tensor2list(gd0)
-        mom0_list = self.tensor2list(mom0)
-        
-        self.h.module.manifold.fill_gd(gd0_list)
-        self.h.module.manifold.fill_cotan(mom0_list)
-        
-        return [self.h.module.manifold.gd[0], self.h.module.manifold.gd[1], self.h.module.manifold.gd[2][0], self.h.module.manifold.gd[2][1]]
-    
+      
+    def shoot(self):       
+        intermediate_states, intermediate_controls = shoot_euler_source(self.h, self.source, it=10)
+        return intermediate_states, intermediate_controls    
     
     
     def energy_tensor(self, gd0, mom0):
         ''' Energy functional for tensor input
             (to compute the automatic gradient the input is needed as tensor, not as list) '''
         
-        gd0_list = self.tensor2list(gd0)
-        mom0_list = self.tensor2list(mom0)
-        
-        self.h.module.manifold.fill_gd(gd0_list)
-        self.h.module.manifold.fill_cotan(mom0_list)
+        self.h.module.manifold.fill_gd(gd0)
+        self.h.module.manifold.fill_cotan(mom0)
         self.h.geodesic_controls()
         self.shoot()
-        
-        geodesicControls0 = self.h.module.controls
-        gd1 = self.h.module.manifold.gd
-                
+                        
         cost = self.cost()
-        attach = self.attach(self.target)
+        attach = self.attach()
         print('cost:', self.gamma * cost.detach().numpy(), 'attach:', attach.detach().numpy())
         
         return self.gamma*cost + attach

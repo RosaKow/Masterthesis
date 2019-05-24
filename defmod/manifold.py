@@ -77,6 +77,12 @@ class Landmarks(Manifold):
 
     def unroll_tan(self):
         return [self.__tan]
+    
+    def gd_points(self):
+        return self.gd.view(-1, self.dim)
+    
+    def unroll_gd_points(self):
+        return [self.gd_points()]
 
     def unroll_cotan(self):
         return [self.__cotan]
@@ -100,8 +106,6 @@ class Landmarks(Manifold):
         return self.__cotan
 
     def fill(self, manifold, copy=False, retain_grad=False):
-        #print(manifold)
-        #print(isinstance(manifold, Landmarks))
         assert isinstance(manifold, Landmarks)
         self.fill_gd(manifold.gd, copy=copy, retain_grad=retain_grad)
         self.fill_tan(manifold.tan, copy=copy, retain_grad=retain_grad)
@@ -413,6 +417,12 @@ class CompoundManifold(Manifold):
         for man in self.__manifold_list:
             l.extend(man.unroll_cotan())
         return l
+    
+    def unroll_tan(self):
+        l = []
+        for man in self.__manifold_list:
+            l.extend(man.unroll_tan())
+        return l
 
     def roll_gd(self, l):
         """Unflattens the list into one suitable for fill_gd() or all *_gd() numerical operations."""
@@ -420,6 +430,15 @@ class CompoundManifold(Manifold):
         for man in self.__manifold_list:
             out.append(man.roll_gd(l))
         return out
+    
+    def gd_points(self):
+        return [man.gd_points() for man in self.manifold_list]
+    
+    def unroll_gd_points(self):
+        l = []
+        for man in self.__manifold_list:
+            l.extend(man.unroll_gd_points())
+        return l
 
     def roll_cotan(self, l):
         out = []
@@ -442,6 +461,14 @@ class CompoundManifold(Manifold):
         self.fill_cotan(manifold.cotan, copy=copy, retain_grad=retain_grad)
 
     def fill_gd(self, gd, copy=False, retain_grad=False):
+        if isinstance(gd, torch.DoubleTensor):
+            l = []
+            n = 0
+            for i in range(self.nb_manifold):
+                m = self.manifold_list[i].numel_gd
+                l.append(gd[n:n+m])
+                n = n + m
+            gd = l
         for i in range(len(self.__manifold_list)):
             self.__manifold_list[i].fill_gd(gd[i], copy=copy, retain_grad=retain_grad)
 
@@ -450,6 +477,14 @@ class CompoundManifold(Manifold):
             self.__manifold_list[i].fill_tan(tan[i], copy=copy, retain_grad=retain_grad)
 
     def fill_cotan(self, cotan, copy=False, retain_grad=False):
+        if isinstance(cotan, torch.DoubleTensor):
+            l = []
+            n = 0
+            for i in range(self.nb_manifold):
+                m = self.manifold_list[i].numel_gd
+                l.append(cotan[n:n+m])
+                n = n + m
+            cotan = l
         for i in range(len(self.__manifold_list)):
             self.__manifold_list[i].fill_cotan(cotan[i], copy=copy, retain_grad=retain_grad)
            

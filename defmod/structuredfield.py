@@ -105,12 +105,12 @@ class CompoundStructuredField(StructuredField):
 
     
 class StructuredField_multi(StructuredField):
-    def __init__(self, fields, points_in_region):
-        # TODO: assert that regions are not overlapping
-        super().__init__(None, None)
+    """ Structured Field for Multishape
+        calls on a list of points where the ith field acts on the ith element of the point list """
+    def __init__(self, fields):
+        super().__init__()
         self.__fields = fields
         self.__nb_fields = len(fields)
-        self.__points_in_region = points_in_region
         
     @property
     def fields(self):
@@ -119,16 +119,16 @@ class StructuredField_multi(StructuredField):
     @property
     def nb_field(self):
         return len(self.__fields)
+    
+    @property
+    def fieldlist(self):
+        return self.__fields
 
     def __getitem__(self, index):
         return self.__fields
 
-    def __call__(self, points, k=0):
-        multifield = torch.zeros(points.shape)
-        for i in range(len(self.__points_in_region)):
-            label = torch.tensor(np.array(self.__points_in_region[i](points)).astype(int))
-            field = self.__fields[i](points)
-            field = torch.mul(field, torch.ger(label,torch.ones(points.shape[1]).long()).float())
-            multifield = multifield + field
-        return multifield
+    def __call__(self, points_list):
+        return [f(p) for f, p in zip(self.__fields, points_list)]
+
+
 
