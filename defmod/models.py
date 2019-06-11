@@ -292,12 +292,7 @@ class ModelMultishapePointsRegistration(ModelMultishape):
         h = Hamiltonian_multi(modules, self.constraints)
         shoot_euler(h, 10)
         
-        #TODO: use roll function here
-        self.__shot_points = [*[gd.view(-1, 2) for gd in modules.manifold.gd[:-1]], [gd.view(-1, 2) for gd in modules.manifold.gd[-1]]]
-       
-        #print('constraints___________________')
-        #modules.compute_geodesic_variables(self.constraints)
-        #print(self.constraints(modules))
+        self.__shot_points = [*[man[0].gd.view(-1, 2) for man in modules.manifold.manifold_list[:-1]], [gd.view(-1, 2) for gd in modules.manifold.manifold_list[-1].gd]]
         
         self.shot_manifold = modules.manifold.copy(retain_grad=True)
         self.deformation_cost = modules.cost()

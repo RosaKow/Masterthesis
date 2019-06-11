@@ -63,8 +63,6 @@ def largeDeformation(modules, states, controls, points):
         modules.fill_controls(controls[t])
         for i in range(len(modules.module_list)):
             phi[i] = phi[i] + 1/N * modules.module_list[i](phi[i])
-            
-        
     return phi
 
 import matplotlib.pyplot as plt

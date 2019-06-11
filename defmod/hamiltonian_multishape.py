@@ -31,7 +31,7 @@ class Hamiltonian_multi:
     #sum([mod.manifold.inner_prod_module(mod) for mod in self.__modules])
 
     def geodesic_controls(self):
-        self.__modules.compute_geodesic_variables_silent(self.__constr)
+        self.__modules.compute_geodesic_variables(self.__constr)
         
     def apply_constr(self):
         """ Apply Constraints on the generated vectorfields"""

@@ -26,26 +26,6 @@ class Identity(Constraints):
         G = torch.cat( [G, -torch.eye(n)], 1)   
         return G
     
-    def constraintsmatrix_silent(self, modules):
-        """ Matrix that corresponds to the function g in C = g xi """
-        n_silent = modules.module_list[0][0].manifold.numel_gd
-        ni = sum([n.manifold.numel_gd for n in modules.module_list[0][1:]])
-        G = torch.eye(n_silent)
-        G = torch.cat([torch.cat([G, torch.zeros(n_silent, ni)], 1), torch.cat([torch.zeros(ni, n_silent), torch.zeros(ni, ni)], 1)], 0)
-        print(G.shape)
-        n = n_silent+ni
-        for i in range(len(modules.module_list)-2):
-            ni = modules.module_list[i+1].manifold.numel_gd
-            G = torch.cat([torch.cat([G, torch.zeros(n, ni)], 1), torch.cat([torch.zeros(ni, n), torch.eye(ni)], 1)], 0)
-            n = n + ni
-            ni = sum([n.manifold.numel_gd for n in modules.module_list[0][1:]])
-            G = torch.cat([torch.cat([G, torch.zeros(n, ni)], 1), torch.cat([torch.zeros(ni, n), torch.zeros(ni, ni)], 1)], 0)
-            n = n+ni
-
-            
-        G = torch.cat( [G, -G], 1)   
-        return G
-    
     def call_by_matmul(self, modules):
         fields = modules.field_generator().fieldlist
                 

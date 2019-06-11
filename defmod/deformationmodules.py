@@ -106,6 +106,9 @@ class Translations(DeformationModule):
         """ computes matrix for autoaction = xi zeta Z^-1 zeta^\ast xi^\ast """
         ## Kernelmatrix K_qq
         return kronecker_I2(K_xx(self.manifold.gd.view(-1, self.__manifold.dim), self.__sigma))
+    
+    def costop_inv(self):
+        return torch.eye(self.__dim_controls)
 
 class SilentPoints(DeformationModule):
     """Module handling silent points."""
@@ -160,6 +163,8 @@ class SilentPoints(DeformationModule):
     def adjoint(self, manifold):
         return StructuredField_Null()
 
+    def costop_inv(self):
+        return torch.tensor([])
 
 class CompoundModule(DeformationModule, Iterable):
     """Combination of modules."""
@@ -260,12 +265,12 @@ class CompoundModule(DeformationModule, Iterable):
                 self.fill_controls(c)
                 actionmat[:,tmp+i] = torch.cat(self.manifold.action(self.module_list[m]).unroll_tan())
             tmp = tmp + list(self.module_list[m].controls.shape)[0]
-        A = torch.mm(actionmat, torch.transpose(actionmat, 0,1))
+        #A = torch.mm(actionmat, torch.transpose(actionmat, 0,1))
+        A = torch.mm(actionmat, torch.mm(self.costop_inv(), torch.transpose(actionmat, 0,1)))
+
         return A
     
     def autoaction_silent(self):
-        """ only if cost operator = Id """
-        # TODO: cost operator for each module
         actionmat = torch.zeros(self.manifold.manifold_list[0].numel_gd, self.numel_controls)
         tmp = 0
         for m in range(len(self.module_list)):
@@ -276,9 +281,20 @@ class CompoundModule(DeformationModule, Iterable):
                 self.fill_controls(c)
                 actionmat[:,tmp+i] = torch.cat(self.manifold.manifold_list[0].action(self.module_list[m]).unroll_tan())
             tmp = tmp + list(self.module_list[m].controls.shape)[0]
-        A = torch.mm(actionmat, torch.transpose(actionmat, 0,1))
+        #A = torch.mm(actionmat, torch.transpose(actionmat, 0,1))
+        A = torch.mm(actionmat, torch.mm(self.costop_inv(), torch.transpose(actionmat, 0,1)))
         return A
     
+    def costop_inv(self):
+        # blockdiagonal matrix of inverse cost operators of each module
+        Z = self.module_list[0].costop_inv()
+        n = len(Z)
+        for m in self.module_list[1:]:
+            Zi = m.costop_inv()
+            ni = len(Zi)
+            Z = torch.cat([torch.cat([Z, torch.zeros(n, ni)], 1), torch.cat([torch.zeros(ni, n), Zi], 1)], 0)
+            n = n + ni
+        return Z
     
 class Background(DeformationModule):
     """ Creates the background module for the multishape framework"""
@@ -394,6 +410,9 @@ class Background(DeformationModule):
     def autoaction_silent(self):
         """ computes matrix for autoaction = xi zeta Z^-1 zeta^\ast xi^\ast """
         return kronecker_I2(self.K_q())
+    
+    def costop_inv(self):
+        return self.K_q()
         
         
 class GlobalTranslation(DeformationModule):
@@ -417,7 +436,7 @@ class GlobalTranslation(DeformationModule):
     
     @property
     def dim_controls(self):
-        return self.manifold.dim
+        return self.__dim
 
     def __get_controls(self):
         return self.__controls
@@ -464,11 +483,13 @@ class GlobalTranslation(DeformationModule):
         self.__translationmodule.manifold.fill_gd(self.z().view(-1))
         return self.__translationmodule.field_generator()
     
-    ## check if working
     def autoaction(self):
         """ computes matrix for autoaction = xi zeta Z^-1 zeta^\ast xi^\ast """
         K = K_xy(self.manifold.gd.view(-1, self.manifold.dim), self.z(), self.__sigma)
         return kronecker_I2(torch.mm(K, torch.transpose(K,0,1)))
+    
+    def costop_inv(self):
+        return torch.eye(self.dim_controls)
 
     
 class LocalConstraintTranslation(DeformationModule):
@@ -548,6 +569,9 @@ class LocalConstraintTranslation(DeformationModule):
         K_q = sum([K_xy(self.__support.view(-1, self.__manifold.dim)[i,:], self.manifold.gd.view(-1, self.__manifold.dim), self.__sigma) for i in range(len(self.__support))])
         
         return torch.mm(K_q.view(2,1), K_q.view(1,2))
+    
+    def costop_inv(self):
+        return torch.eye(self.dim_controls)
         
 class LocalScaling(LocalConstraintTranslation):
     def __init__(self, manifold, sigma):
@@ -580,8 +604,8 @@ class GlobalConstraintTranslation(DeformationModule):
         self.__controls = torch.tensor([1.], requires_grad=True)
         self.__f_support = f_support
         self.__f_vectors = f_vectors
-        self.__vectors = f_vectors(self.__manifold.gd)
-        self.__support = f_support(self.__manifold.gd)        
+        #self.__vectors = f_vectors(self.__manifold.gd)
+        #self.__support = f_support(self.__manifold.gd)        
         
         man = Landmarks(manifold.dim, 1)
         gd = manifold.gd.view(-1,manifold.dim)
@@ -637,7 +661,8 @@ class GlobalConstraintTranslation(DeformationModule):
     def compute_geodesic_control(self, man):
         """Computes geodesic control from StructuredField."""
         self.fill_controls(1)
-        controls = torch.mm(self.field_generator()(man.gd.view(-1,self.manifold.dim)).view(1,-1), man.cotan.view(-1,1))
+        #controls = torch.mm(self.field_generator()(man.gd.view(-1,self.manifold.dim)).view(1,-1), man.cotan.view(-1,1))
+        controls = man.inner_prod_field(self.field_generator())
         self.__controls = controls.contiguous().view(-1)
         
     def compute_geodesic_control_from_self(self, manifold):
@@ -654,6 +679,9 @@ class GlobalConstraintTranslation(DeformationModule):
         K_q = sum([torch.mm( K_xy(self.manifold.gd.view(-1, self.__manifold.dim), self.__support.view(-1, self.__manifold.dim)[i,:].view(-1, self.__manifold.dim), self.__sigma), self.__vectors[i,:].view(1,-1)) for i in range(len(self.__support))], 0)
         
         return torch.mm(K_q.view(-1,1), K_q.view(1,-1))
+    
+    def costop_inv(self):
+        return torch.eye(self.dim_controls)
 
     
 class GlobalScaling(GlobalConstraintTranslation):

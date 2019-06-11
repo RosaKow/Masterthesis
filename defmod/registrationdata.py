@@ -2,6 +2,7 @@ import math
 pi = math.pi
 import torch
 import defmod as dm
+from .multimodule_usefulfunctions import kronecker_I2
 
 
 class RegistrationData:
@@ -12,11 +13,18 @@ class RegistrationData:
         
 class PointCircles(RegistrationData):
     """ Builds source and target points for translation and scaling of circles """
-    def __init__(self):
+    def __init__(self, nb_pts, origin1, radius1, transvec, scal, dim = 2):
         super().__init__()       
         
+        self.__nb_pts = nb_pts
+        self.__origin1 = origin1
+        self.__radius1 = radius1
+        self.__transvec = transvec
+        self.__scal = scal
+        self.__dim = 2
         self.__source = None
         self.__target = None
+        self.__modules = None
         
     @property
     def source(self):
@@ -25,6 +33,10 @@ class PointCircles(RegistrationData):
     @property
     def target(self):
         return self.__target
+    
+    @property
+    def modules(self):
+        return self.__modules
 
     def CirclePoints(self, origin, r,n):
         points = []
@@ -38,6 +50,37 @@ class PointCircles(RegistrationData):
             circles.append(self.CirclePoints(o, r, n))
         return circles
     
+    def build_source(self):
+        origin1 = torch.tensor(self.__origin1)
+        self.__source = self.multipleCircles(self.__origin1, self.__radius1, self.__nb_pts)
+
+    def build_target(self):
+        origin1 = torch.tensor(self.__origin1)
+        origin2 = [o + v for o,v in zip(origin1, self.__transvec)]
+        radius2 = [r*s for r,s in zip(self.__radius1,self.__scal)]
+        self.__target = self.multipleCircles(origin2, radius2, self.__nb_pts)
+        
+    def build_modules(self):
+        self.build_source()
+        self.build_target()
+                
+        manifold1 = dm.manifold.Landmarks(self.__dim, self.__nb_pts[0], gd=self.__source[0].view(-1))
+        manifold2 = dm.manifold.Landmarks(self.__dim, self.__nb_pts[1], gd=self.__source[1].view(-1))
+
+        silent1 = dm.deformationmodules.SilentPoints(manifold1)
+        trans1 = dm.deformationmodules.GlobalTranslation(manifold1, sigma=20)
+        trans1.fill_controls_zero()
+        scal1 = dm.deformationmodules.GlobalScaling(manifold1, sigma=20)
+        mod1 = dm.deformationmodules.CompoundModule([silent1, trans1, scal1])
+        
+        silent2 = dm.deformationmodules.SilentPoints(manifold2)
+        trans2 = dm.deformationmodules.GlobalTranslation(manifold2, sigma=20)
+        trans2.fill_controls_zero()
+        scal2 = dm.deformationmodules.GlobalScaling(manifold2,sigma=20)
+        mod2 = dm.deformationmodules.CompoundModule([silent2, trans2, scal2])
+        
+        self.__modules = [mod1, mod2]
+    
     def __call__(self, nb_pts, origin1, radius1, transvec, scal=1):
         origin1 = torch.tensor(origin1)
         origin2 = [o + torch.tensor(v) for o,v in zip(origin1, transvec)]
@@ -45,6 +88,118 @@ class PointCircles(RegistrationData):
         self.__source = self.multipleCircles(origin1, radius1, nb_pts)
         self.__target = self.multipleCircles(origin2, radius2, nb_pts)
 
+        
+class part_rigid(RegistrationData):
+    def __init__(self, source_vertices, target_vertices, nb_pts, width=0.1, dim=2):
+        super().__init__()
+        self.__source = None
+        self.__target = None
+        self.__modules = None
+        self.__dim = dim
+        self.__nb_pts = nb_pts
+        
+        self.__source_vertices = source_vertices
+        self.__target_vertices = target_vertices
+        
+    @property
+    def source(self):
+        return self.__source
+    
+    @property
+    def target(self):
+        return self.__target
+    
+    @property
+    def modules(self):
+        return self.__modules
+    
+    def compute_edges(self, v):
+        a = v[1,:] - v[0,:]
+        tmp = (a/torch.norm(a)).view(1,2)
+        b = torch.cat([tmp[:,1], -tmp[:,0]])
+        x = torch.cat([v[0,:] + b,
+                       v[0,:] - b,
+                       v[1,:] + b,
+                       v[1,:] - b],0).view(-1,2)
+        a = v[1,:] - v[2,:]
+        tmp = (a/torch.norm(a)).view(1,2)
+        b = torch.cat([tmp[:,1], -tmp[:,0]])
+        y = torch.cat([v[1,:] - b,
+                       v[1,:] + b,
+                       v[2,:] - b,
+                       v[2,:] + b],0).view(-1,2)
+        q = []
+        for i in range(2):
+            x1 = x[i::2,:]
+            y1 = y[i::2,:]
+            p = torch.cat([x[i::2,:], y[i::2,:]],0).view(-1,2)
+            A = torch.transpose(torch.mm(torch.tensor([[-1.,1., 0.,0.], [0.,0.,1.,-1.]]),p),0,1)
+            B = torch.mm(torch.tensor([[-1.,0.,1.,0.]]),p).view(2,1)
+            c,_ = torch.gesv(B, A)
+            q.append((x1[0,:]+c[0,0]*(x1[1,:]-x1[0,:])).view(1,2))
+                            
+        return torch.cat([q[0], x[0:2,:].view(-1,2),q[1],q[0]],0) ,torch.cat([q[0], y[2:,:].view(-1,2), q[1],q[0]],0), q
+    
+    def points_on_line(self,a,b, n):
+        points = []
+        k = torch.tensor(range(n)).view(-1,1).double()
+        s = (b - a).view(-1,self.__dim).double()
+        return 1/(n-1)*s*k+a*torch.ones(k.shape)
+            
+    def build_source(self):
+        self.__source = []
+        v1, v2,_ = self.compute_edges(self.__source_vertices)
+        nb_pts = [self.__nb_pts[0], self.__nb_pts[1], self.__nb_pts[0], self.__nb_pts[1]]
+        
+        for v in [v1,v2]:
+            source = torch.zeros([0,2],requires_grad=True)
+            for i in range(len(v1)-1):
+                source = torch.cat([source,self.points_on_line(v[i,:],v[i+1,:],nb_pts[i])[:-1]],0)
+            self.__source.append(source)
+      
+    def build_target(self):
+        self.__target = []
+        v1, v2,_ = self.compute_edges(self.__target_vertices)
+        nb_pts = [self.__nb_pts[0], self.__nb_pts[1], self.__nb_pts[0], self.__nb_pts[1]]
+        
+        for v in [v1,v2]:
+            target = torch.zeros([0,2],requires_grad=True)
+            for i in range(len(v1)-1):
+                target = torch.cat([target,self.points_on_line(v[i],v[i+1],nb_pts[i])[:-1]],0)
+            self.__target.append(target)
+            
+    def intersection(self):
+        l=[]
+        l1 = [self.source[0][i,:] for i in range(len(self.source[0]))]
+        l2 = [self.source[1][i,:] for i in range(len(self.source[0]))]
+        #print(self.source[0])
+        #print(self.source[1])
+        for x in l1:
+            for y in l2:
+                if torch.all(torch.eq(x,y)):
+                    l.append(x.view(1,2))
+        return torch.cat(l)
+
+    def build_modules(self):
+        self.__modules = []
+        _,_,q = self.compute_edges(self.__source_vertices)
+        gd_silent = self.intersection()
+        man_silent = dm.manifold.Landmarks(2, self.__nb_pts[1], gd = gd_silent.view(-1))    
+
+        #gd_silent = self.__source
+        #man_silent = dm.manifold.Landmarks(2, 2*sum(self.__nb_pts), gd = gd_silent[i].view(-1))    
+
+        
+        for i in range(2):
+            man = dm.manifold.Landmarks(2, len(self.__source[i]), gd=self.__source[i].view(-1))
+            rot = dm.deformationmodules.GlobalRotation(man, sigma=20)
+            trans = dm.deformationmodules.GlobalTranslation(man, sigma=20)
+            trans.fill_controls_zero()
+            silent = dm.deformationmodules.SilentPoints(man_silent)
+            silent_source = dm.deformationmodules.SilentPoints(dm.manifold.Landmarks(2, len(self.__source[i]), gd=self.__source[i].view(-1)))
+            mod = dm.deformationmodules.CompoundModule([silent, rot, trans, silent_source])
+            self.__modules.append(mod)
+            
         
 class organs(RegistrationData):
     def __init__(self):

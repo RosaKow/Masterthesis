@@ -34,6 +34,10 @@ class MultiShapeModule(torch.nn.Module):
         return self.__module_list
     
     @property
+    def silent_list(self):
+        return self.__silent_list
+    
+    @property
     def nb_pts(self):
         return [m.nb_pts for m in self.__manifold.manifold_list[:-1]]
     
@@ -76,12 +80,8 @@ class MultiShapeModule(torch.nn.Module):
         controls = [m.controls for m in self.__module_list]
         return controls
     
-    def get_controls_background(self):
-        return self.__background.controls
-    
-  
     def fill_controls(self, controls, copy=False, retain_grad=False):
-        assert len(controls) == self.nb_module +1
+        #assert len(controls) == self.nb_module +1
         if copy:
             for i in range(self.nb_module):
                 self.__module_list[i].__controls = controls[i].clone().detach().requires_grad_()
@@ -89,7 +89,7 @@ class MultiShapeModule(torch.nn.Module):
                 self.__module_list[i].__controls = controls[i].clone().requires_grad_()        
         else:
             for i in range(self.nb_module):
-                self.__module_list[i].fill_controls(controls)
+                self.__module_list[i].fill_controls(controls[i])
             
     controls = property(__get_controls, fill_controls)
 
@@ -131,6 +131,7 @@ class MultiShapeModule(torch.nn.Module):
         #return fields
         return StructuredField_multi(fields)
     
+    
     def cost(self):
         return sum([m.cost() for m in self.__module_list])
     
@@ -149,6 +150,7 @@ class MultiShapeModule(torch.nn.Module):
         """ """
         n = self.module_list[0].manifold.manifold_list[0].numel_gd
         A = self.__module_list[0].autoaction_silent()
+        
         for m in self.__module_list[1:-1]:
             ni = m.manifold.manifold_list[0].numel_gd
             A = torch.cat([torch.cat([A, torch.zeros(n, ni)], 1), torch.cat([torch.zeros(ni, n), m.autoaction_silent()], 1)], 0)
@@ -163,55 +165,17 @@ class MultiShapeModule(torch.nn.Module):
 
         fields = self.field_generator().fieldlist
         constr_mat = constr.constraintsmatrix(self)
-                
-        gd_action = torch.cat([*[torch.cat(man.action(mod).unroll_tan()) for mod,man in zip(self.module_list[:-1], self.manifold)],
-                               torch.cat(self.manifold.manifold_list[-1].action(self.module_list[-1]).unroll_tan())]).view(-1, self.manifold.dim)
+        
+        gd_action = torch.cat([*[torch.cat(man.manifold_list[0].action(mod).unroll_tan()) for mod,man in zip(self.module_list[:-1], self.manifold)], 
+                                torch.cat(self.manifold.manifold_list[-1].action(self.module_list[-1]).unroll_tan())]).view(-1, self.manifold.dim)
 
         
         B = torch.mm(constr_mat, gd_action.view(-1,1))
-           
-        A = torch.mm(torch.mm(constr_mat, self.autoaction()), torch.transpose(constr_mat,0,1))
-            
-        lambda_qp,_ = torch.gesv(B, A)
-        self.fill_l(lambda_qp)
-
-        tmp = torch.mm(torch.transpose(constr_mat,0,1), lambda_qp)
-        
-        man = self.manifold.copy(retain_grad=True) 
-        
-        c = 0
-        for m in man.manifold_list[:-1]:
-            m.manifold_list[0].cotan = m.manifold_list[0].cotan - tmp[c:c+m.manifold_list[0].numel_gd].view(-1)
-            c = c+m.manifold_list[0].numel_gd
-        for m in man.manifold_list[-1].manifold_list:
-            m.cotan = m.cotan - tmp[c:c+m.numel_gd].view(-1)
-            c = c+m.numel_gd
-        
-        self.compute_geodesic_control_from_self(man)
-        h_qp = self.controls
-                                        
-        return lambda_qp, h_qp
-      
-    
-    def compute_geodesic_variables_silent(self, constr):
-
-        self.compute_geodesic_control_from_self(self.manifold)
-        fields = self.field_generator().fieldlist
-        constr_mat = constr.constraintsmatrix(self)
-        
-        gd_action = torch.cat([*[torch.cat(man.manifold_list[0].action(mod).unroll_tan()) for mod,man in zip(self.module_list[:-1], self.manifold)],
-                               torch.cat(self.manifold.manifold_list[-1].action(self.module_list[-1]).unroll_tan())]).view(-1, self.manifold.dim)
-        
-        B = torch.mm(constr_mat, gd_action.view(-1,1))
-           
         A = torch.mm(torch.mm(constr_mat, self.autoaction_silent()), torch.transpose(constr_mat,0,1))
             
         lambda_qp,_ = torch.gesv(B, A)
         self.fill_l(lambda_qp)
-             
-        #p = torch.cat([*self.manifold.unroll_cotan()]).view(-1,1)
-        #cotan = dm.multimodule_usefulfunctions.gdtensor2list(p.view(-1), self.numel_gd[:-1])
-        
+
         tmp = torch.mm(torch.transpose(constr_mat,0,1), lambda_qp)
         
         man = self.manifold.copy(retain_grad=True) 
@@ -223,7 +187,7 @@ class MultiShapeModule(torch.nn.Module):
         for m in man.manifold_list[-1].manifold_list:
             m.cotan = m.cotan - tmp[c:c+m.numel_gd].view(-1)
             c = c+m.numel_gd
-                
+        
         self.compute_geodesic_control_from_self(man)
         h_qp = self.controls
                                         
@@ -231,7 +195,8 @@ class MultiShapeModule(torch.nn.Module):
       
     
     def compute_geodesic_control(self, manifold): 
-
+        for m in self.__module_list:
+            m.compute_geodesic_control(manifold)
         self.fill_controls([m.controls for m in self.__module_list])
         
             

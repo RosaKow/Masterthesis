@@ -4,6 +4,8 @@ from torch.autograd import grad
 from .hamiltonian import Hamiltonian
 from torchdiffeq import odeint as odeint
 from .usefulfunctions import make_grad_graph
+from .deformationmodules import SilentPoints
+from .manifold import Landmarks
 
 import defmod as dm
 
@@ -14,33 +16,6 @@ def shoot(h, it, method):
     else:
         return shoot_torchdiffeq(h, it, method)
     
-    
-def shoot_euler_multishape(h, it):
-    step = 1. / it
-
-    intermediate_states = [h.module.manifold.copy()]
-    intermediate_controls = []
-    
-    for i in range(it):
-        h.geodesic_controls()
-        
-        l = [*h.module.manifold.unroll_gd(), *h.module.manifold.unroll_cotan()]
-        
-        delta = grad(h(), l, create_graph=True, allow_unused=True)
-        # TODO: is list() necessary?
-        nb_modules = int(len(delta)/4)
-        d_gd = [delta[0].view(-1), delta[1].view(-1), [delta[2].view(-1), delta[3].view(-1)]]
-        d_mom = [delta[4].view(-1), delta[5].view(-1), [delta[6].view(-1), delta[7].view(-1)]]
-        
-        
-        h.module.manifold.muladd_gd(d_mom, step)
-        h.module.manifold.muladd_cotan(d_gd, -step)
-        
-        intermediate_states.append(h.module.manifold.copy())
-        intermediate_controls.append(h.module.controls)
-        
-    final_gd = h.module.manifold
-    return  [final_gd.gd[0], final_gd.gd[1], final_gd.gd[2][0], final_gd.gd[2][1]]#, intermediate_controls
 
 def shoot_euler(h, it):
     step = 1. / it
@@ -71,18 +46,19 @@ def shoot_euler(h, it):
 
 def shoot_euler_source(h, source, it):
     step = 1. / it
-
+     
+    #silent_source = SilentPoints(Landmarks(dim, len(source), gd = source)
+    #for mod in h.module.module_list:
+    
     intermediate_states = [h.module.manifold.copy()]
     intermediate_controls = []
+    intermediate_points = [source]
     
     for i in range(it):
         h.geodesic_controls()
-
-        speed_action = [gdi.action(modulei).tan for gdi, modulei in zip(h.module.manifold.manifold_list, h.module)] 
         
         l = [*h.module.manifold.unroll_gd(), *h.module.manifold.unroll_cotan()]
         delta = grad(h(), l, create_graph=True, allow_unused=True)
-        # TODO: is list() necessary?      
         
         d_gd = h.module.manifold.roll_gd(list(delta[:int(len(delta)/2)]))
         d_mom = h.module.manifold.roll_cotan(list(delta[int(len(delta)/2):]))
@@ -93,7 +69,10 @@ def shoot_euler_source(h, source, it):
         intermediate_states.append(h.module.manifold.copy())
         intermediate_controls.append(h.module.controls)
         
-    return intermediate_states, intermediate_controls
+        moved_points = [p + step*mod(p) for mod, p in zip(h.module, intermediate_points[-1])]
+        intermediate_points.append()
+        
+    return intermediate_states, intermediate_controls, intermediate_points
 
 def shoot_euler_controls(h, controls, it):
     assert len(controls) == it
