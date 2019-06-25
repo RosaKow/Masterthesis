@@ -44,32 +44,35 @@ def shoot_euler(h, it):
     return intermediate_states, intermediate_controls
 
 
-def shoot_euler_source(h, source, it):
+def shoot_euler_silent(h, points, it):
     step = 1. / it
      
-    #silent_source = SilentPoints(Landmarks(dim, len(source), gd = source)
-    #for mod in h.module.module_list:
+    compound_silent = []
+    for m in h.module.module_list:
+        compound_silent.append(dm.deformationmodules.CompoundModule([points, *m.module_list]))
+    H_silent = dm.hamiltonian_multishape.Hamiltonian_multi(dm.multishape.MultiShapeModule(compound_silent), h.constraints)
+    H_silent.module.module_list[-1].fill_controls([[],*h.module.module_list[-1].controls])
+
     
-    intermediate_states = [h.module.manifold.copy()]
+    intermediate_states = [H_silent.module.manifold.copy()]
     intermediate_controls = []
-    intermediate_points = [source]
     
     for i in range(it):
-        h.geodesic_controls()
+        H_silent.geodesic_controls()
         
-        l = [*h.module.manifold.unroll_gd(), *h.module.manifold.unroll_cotan()]
-        delta = grad(h(), l, create_graph=True, allow_unused=True)
+        l = [*H_silent.module.manifold.unroll_gd(), *H_silent.module.manifold.unroll_cotan()]
+        delta = grad(H_silent(), l, create_graph=True, allow_unused=True)
         
-        d_gd = h.module.manifold.roll_gd(list(delta[:int(len(delta)/2)]))
-        d_mom = h.module.manifold.roll_cotan(list(delta[int(len(delta)/2):]))
+        d_gd = H_silent.module.manifold.roll_gd(list(delta[:int(len(delta)/2)]))
+        d_mom = H_silent.module.manifold.roll_cotan(list(delta[int(len(delta)/2):]))
  
-        h.module.manifold.muladd_gd(d_mom, step)
-        h.module.manifold.muladd_cotan(d_gd, -step)
+        H_silent.module.manifold.muladd_gd(d_mom, step)
+        H_silent.module.manifold.muladd_cotan(d_gd, -step)
         
-        intermediate_states.append(h.module.manifold.copy())
-        intermediate_controls.append(h.module.controls)
+        intermediate_states.append(H_silent.module.manifold.copy())
+        intermediate_controls.append(H_silent.module.controls)
         
-        moved_points = [p + step*mod(p) for mod, p in zip(h.module, intermediate_points[-1])]
+        moved_points = [p + step*mod(p) for mod, p in zip(H_silent.module, intermediate_points[-1])]
         intermediate_points.append()
         
     return intermediate_states, intermediate_controls, intermediate_points

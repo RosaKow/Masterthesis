@@ -1,7 +1,7 @@
 import torch
 import multimodule_usefulfunctions as mm 
 import numpy as np
-from defmod.shooting import shoot_euler, shoot_euler_source
+from defmod.shooting import shoot_euler, shoot_euler_silent
 from defmod.attachement import L2NormAttachement_multi, L2NormAttachement
 
 
@@ -106,6 +106,11 @@ class EnergyFunctional():
         intermediate_states, intermediate_controls = shoot_euler(self.h, it=10)
         return intermediate_states, intermediate_controls    
     
+    def shoot_grid(self, gridpoints):
+        intermediate_states, intermediate_controls = shoot_euler_silent(self.h, gridpoints, it=10)
+        shot_grid = [m.gd[0] for m in intermediate_states[-1]]
+        return shot_grid
+    
     
     def energy_tensor(self, gd0, mom0):
         ''' Energy functional for tensor input
@@ -115,8 +120,8 @@ class EnergyFunctional():
         self.h.module.manifold.fill_cotan(mom0)
         self.h.geodesic_controls()
         
-        print('energy: constraints_________________')
-        print(self.h.constraints(self.h.module))
+        #print('energy: constraints_________________')
+        #print(self.h.constraints(self.h.module))
         self.shoot()
                         
         cost = self.cost()

@@ -66,13 +66,14 @@ def largeDeformation(modules, states, controls, points):
     return phi
 
 import matplotlib.pyplot as plt
-def plot_grid(gridx,gridy, **kwargs):
-    fig1 = plt.figure()  
+def plot_grid(gridx,gridy, color='blue', figsize=(5,5), dpi=100):
+    fig1 = plt.figure(figsize=figsize, dpi=dpi)  
     ax = fig1.add_subplot(1, 1, 1) 
     for i in range(gridx.shape[0]):
-        ax.plot(gridx[i,:], gridy[i,:], **kwargs)
+        ax.plot(gridx[i,:], gridy[i,:], color=color)
     for i in range(gridx.shape[1]):
-        ax.plot(gridx[:,i], gridy[:,i], **kwargs)
+        ax.plot(gridx[:,i], gridy[:,i], color=color)
+    return fig1
         
 def plot_MultiGrid(phi, grid, label):
     '''input: grid = [gridx, gridy]

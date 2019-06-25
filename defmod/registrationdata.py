@@ -3,6 +3,7 @@ pi = math.pi
 import torch
 import defmod as dm
 from .multimodule_usefulfunctions import kronecker_I2
+from .usefulfunctions import grid2vec
 
 
 class RegistrationData:
@@ -87,7 +88,25 @@ class PointCircles(RegistrationData):
         radius2 = radius1 * scal
         self.__source = self.multipleCircles(origin1, radius1, nb_pts)
         self.__target = self.multipleCircles(origin2, radius2, nb_pts)
+        
+    def grid_label(self, xmin, xmax, ymin, ymax, dx, dy):
+        """ returns grid and labels for each gridpoint """
+        x, y = torch.meshgrid([torch.arange(xmin, xmax, dx), torch.arange(ymin, ymax, dy)])
+        nx, ny = x.shape[0], x.shape[1] 
 
+        gridpoints = dm.usefulfunctions.grid2vec(x, y).type(torch.DoubleTensor)
+
+        label = torch.zeros(len(gridpoints))
+        for i in range(len(gridpoints)): 
+            p = gridpoints[i,:]
+            if (torch.norm(p-torch.tensor(self.__origin1[0]))) < self.__radius1[0]:
+                label[i] = 1
+            elif (torch.norm(p-torch.tensor(self.__origin1[1]))) < self.__radius1[1]:
+                label[i] = 2
+            else:
+                label[i]=3
+                
+        return x,y, label.view(x.shape)
         
 class part_rigid(RegistrationData):
     def __init__(self, source_vertices, target_vertices, nb_pts, width=0.1, dim=2):
