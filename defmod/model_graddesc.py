@@ -5,7 +5,7 @@ from defmod.shooting import shoot_euler, shoot_euler_silent
 from defmod.attachement import L2NormAttachement_multi, L2NormAttachement
 
 
-def gill_murray_wright(E, Enew, gradE,X, Xnew, k, kmax = 50):
+def gill_murray_wright(E, Enew, gradE,X, Xnew, k, kmax = 200):
     """ Convergence Criteria of Gill, Murray, Wright """
     tau = 10**-9
     eps = 10**-8
@@ -162,4 +162,67 @@ class EnergyFunctional():
     def list2tensor(self, x):
         a = [*[a for a in x[:-1]], *[a for a in x[-1]]]
         return torch.cat(a,0).requires_grad_().view(-1).double()
+    
+    
+    
+############################################################
+class EnergyFunctional_unconstrained():
+    def __init__(self, modules, h, source, target, dim=2, gamma=1, attach=None):
+        super().__init__()
+        self.__modules = modules
+        self.h = h
+        self.source = source
+        self.target = target
+        self.attach_func = attach
+        self.dim = dim
+        self.nb_pts = [modules.module_list[0].manifold.nb_pts, modules.module_list[1].manifold.nb_pts]
+        self.gamma = gamma
+        
+    @property
+    def modules(self):
+        return self.__modules
+        
+    def attach(self):
+        if self.attach_func == None:
+            return sum([L2NormAttachement()( self.modules.module_list[i][0].manifold.gd, self.target[i]) for i in range(len(self.target))])
+        else:
+            return sum([self.attach_func( [self.modules.module_list[i].manifold.gd.view(-1,self.dim)], [self.target[i].view(-1,self.dim)]) for i in range(len(self.target))])
+
+        
+    def cost(self):   
+        return self.modules.cost()
+      
+    def shoot(self):       
+        intermediate_states, intermediate_controls = shoot_euler(self.h, it=10)
+        return intermediate_states, intermediate_controls    
+    
+    def shoot_grid(self, gridpoints):
+        intermediate_states, intermediate_controls = shoot_euler_silent(self.h, gridpoints, it=10)
+        shot_grid = [m.gd[0] for m in intermediate_states[-1]]
+        return shot_grid
+    
+    
+    def energy_tensor(self, gd0, mom0):
+        ''' Energy functional for tensor input
+            (to compute the automatic gradient the input is needed as tensor, not as list) '''
+        
+        self.h.module.manifold.fill_gd(gd0)
+        self.h.module.manifold.fill_cotan(mom0)
+        self.h.geodesic_controls()
+        
+        #print('energy: constraints_________________')
+        #print(self.h.constraints(self.h.module))
+        cost = self.cost()
+        self.shoot()
+                     
+        attach = self.attach()
+        print('cost:', self.gamma * cost.detach().numpy(), 'attach:', attach.detach().numpy())
+        
+        return self.gamma*cost + attach
+        
+    
+    def gradE_autograd(self, gd0_tensor, mom0_tensor):
+        grad = torch.autograd.grad(self.energy_tensor(gd0_tensor, mom0_tensor), mom0_tensor)[0]
+        return grad
+    
     

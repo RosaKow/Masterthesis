@@ -44,6 +44,31 @@ def list_points_in_region(points, points_in_region):
         if region_list[i] == True:
             points_list.append(points[i,:])
     return points_list
+
+####################################################
+# Check if a point is in a convex polygon
+
+def point_side(origin, vec, pts):
+    """Returns 1 if the point is to the left, 0 on the vector, and -1 if on the right."""
+    a = origin
+    b = origin + vec
+    return torch.sign((b[0] - a[0])*(pts[1] - a[1]) - (b[1] - a[1])*(pts[0] - a[0]))
+
+def is_inside_shape(shape, points):
+    """Returns True if the point is inside the convex shape (a tensor of CW points)."""
+    closed = close_shape(shape)
+    mask = torch.ones(points.shape[0], dtype=torch.uint8)
+    for i in range(points.shape[0]):
+        for j in range(shape.shape[0]):
+            if point_side(closed[j], closed[j] - closed[j+1], points[i]) == 1:
+                mask[i] = 0
+                break
+
+    return mask
+
+def close_shape(x):
+    return torch.cat([x, x[0, :].view(1, -1)], dim=0)
+
     
 ####################################################
 # Plotting
@@ -55,14 +80,16 @@ def computeCenter(gd):
         
 def largeDeformation(modules, states, controls, points):
     """ compute large deformation of points"""
-    phi = [points, points, points]
+    phi = [points.clone(), points.clone(), points.clone()]
     N = len(states)-1
     
     for t in range(N):
         modules.manifold.fill(states[t])
         modules.fill_controls(controls[t])
         for i in range(len(modules.module_list)):
-            phi[i] = phi[i] + 1/N * modules.module_list[i](phi[i])
+            #print(modules.module_list[i](phi[i]))
+            #phi[i] = phi[i] + 1/N * modules.module_list[i](phi[i])
+            phi[i] = phi[i] + 1/N * modules.module_list[i].field_generator()(phi[i])
     return phi
 
 import matplotlib.pyplot as plt

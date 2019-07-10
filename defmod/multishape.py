@@ -12,13 +12,22 @@ class MultiShapeModule(torch.nn.Module):
                List of functions taking points as input, that check if the module acts on the point.
                sigma_backgroud
         Creates background module with sigma_background"""
-    def __init__(self, module_list, sigma_background=0.5, boundary_labels=None):
+    def __init__(self, module_list, sigma_background, boundary_labels=None, reduce_background=False):
         super().__init__()
         self.__nb_shapes = len(module_list)
         self.__sigma_background = sigma_background
+        self.__reduce_background = reduce_background
         self.__module_list = [mod.copy() for mod in module_list]
         self.__silent_list = [mod.module_list[0].copy() for mod in module_list]
-        self.__background = dm.deformationmodules.Background(self.__silent_list, self.__sigma_background, boundary_labels)
+        
+        if reduce_background:
+            print('reduced')
+            self.__background = dm.deformationmodules.Background_reduced(self.__silent_list, self.__sigma_background, boundary_labels)
+            print(self.__silent_list)
+            print('red background gd',self.__background.manifold.gd)
+        else:
+            self.__background = dm.deformationmodules.Background(self.__silent_list, self.__sigma_background, boundary_labels)
+            
         self.__module_list = [*self.__module_list, self.__background]
         self.__manifold_list = [m.manifold for m in self.__module_list]
         self.__manifold = CompoundManifold(self.__manifold_list)
@@ -27,7 +36,11 @@ class MultiShapeModule(torch.nn.Module):
         self.__background.fill_controls_zero()
         
     def copy(self):
-        return MultiShapeModule([mod.copy() for mod in self.__module_list[:-1]])#, self.__sigma_background)
+        
+        mod_copy = MultiShapeModule([mod.copy() for mod in self.__module_list[:-1]], self.__sigma_background, reduce_background = self.__reduce_background)
+        mod_copy.module_list[-1] = self.__background.copy()
+         
+        return mod_copy
 
     @property
     def module_list(self):
@@ -48,10 +61,11 @@ class MultiShapeModule(torch.nn.Module):
     @property
     def background(self):    
         return self.__background
-        
+    
     @property
-    def points_in_region(self):
-        return self.__points_in_region
+    def reduced_gd(self):
+        return self.__reduce_background
+        
 
     def __getitem__(self, index):
         return self.__module_list[index]

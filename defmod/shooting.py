@@ -23,10 +23,14 @@ def shoot_euler(h, it):
     intermediate_states = [h.module.manifold.copy()]
     intermediate_controls = []
     
+    print(h.module.manifold[-1].manifold_list)
+    
     for i in range(it):
         h.geodesic_controls()
+        print('constr',h.constraints(h.module))
+        mod = h.module.copy()
         
-        speed_action = [gdi.action(modulei).tan for gdi, modulei in zip(h.module.manifold.manifold_list, h.module)] 
+        #speed_action = [gdi.action(modulei).tan for gdi, modulei in zip(h.module.manifold.manifold_list, h.module)] 
         
         l = [*h.module.manifold.unroll_gd(), *h.module.manifold.unroll_cotan()]
         delta = grad(h(), l, create_graph=True, allow_unused=True)
@@ -34,6 +38,18 @@ def shoot_euler(h, it):
         
         d_gd = h.module.manifold.roll_gd(list(delta[:int(len(delta)/2)]))
         d_mom = h.module.manifold.roll_cotan(list(delta[int(len(delta)/2):]))
+        
+        
+        print('d_gd Hamiltonian______________________')
+        print(d_gd)        
+        
+        mod.manifold.fill(intermediate_states[0])
+              
+        print('d_gd field generator__________________')
+        print(mod.field_generator()(mod.manifold.gd))
+        
+        print('========================================')
+        
  
         h.module.manifold.muladd_gd(d_mom, step)
         h.module.manifold.muladd_cotan(d_gd, -step)

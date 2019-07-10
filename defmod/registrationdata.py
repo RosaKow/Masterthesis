@@ -2,7 +2,9 @@ import math
 pi = math.pi
 import torch
 import defmod as dm
-from .multimodule_usefulfunctions import kronecker_I2
+import defmod.hamiltonian_multishape as hamiltonian
+
+from .multimodule_usefulfunctions import kronecker_I2, is_inside_shape
 from .usefulfunctions import grid2vec
 
 
@@ -104,7 +106,7 @@ class PointCircles(RegistrationData):
             elif (torch.norm(p-torch.tensor(self.__origin1[1]))) < self.__radius1[1]:
                 label[i] = 2
             else:
-                label[i]=3
+                label[i]=-1
                 
         return x,y, label.view(x.shape)
         
@@ -164,7 +166,14 @@ class part_rigid(RegistrationData):
         k = torch.tensor(range(n)).view(-1,1).double()
         s = (b - a).view(-1,self.__dim).double()
         return 1/(n-1)*s*k+a*torch.ones(k.shape)
-            
+    
+    def flip(self, x, dim):
+        dim = x.dim() + dim if dim < 0 else dim
+        inds = tuple(slice(None, None) if i != dim
+                 else x.new(torch.arange(x.size(i)-1, -1, -1).tolist()).long()
+                 for i in range(x.dim()))
+        return x[inds]
+
     def build_source(self):
         self.__source = []
         v1, v2,_ = self.compute_edges(self.__source_vertices)
@@ -175,6 +184,9 @@ class part_rigid(RegistrationData):
             for i in range(len(v1)-1):
                 source = torch.cat([source,self.points_on_line(v[i,:],v[i+1,:],nb_pts[i])[:-1]],0)
             self.__source.append(source)
+            
+        # for points_in_shape function
+        self.__source[0] = self.flip(self.__source[0], 0)
       
     def build_target(self):
         self.__target = []
@@ -187,12 +199,38 @@ class part_rigid(RegistrationData):
                 target = torch.cat([target,self.points_on_line(v[i],v[i+1],nb_pts[i])[:-1]],0)
             self.__target.append(target)
             
+            
+    def build_shot_target(self):
+        self.build_target()
+        self.build_modules()
+        
+        modules = dm.multishape.MultiShapeModule([self.modules[0], self.modules[1]], sigma_background=0.5, reduce_background=True)
+        modules.fill_controls_zero()
+        constr_Id = dm.constraints.Identity_Silent_reduced()
+        H = hamiltonian.Hamiltonian_multi(modules, constr_Id)
+
+        modules.module_list[0].module_list[-1].manifold.cotan.view(-1,2)[5:9,:] = torch.tensor([0,5])
+        modules.module_list[0].module_list[-1].manifold.gd.view(-1,2)
+
+        states, controls = dm.shooting.shoot_euler(H, it=10)
+
+        self.__target = [states[-1][0][-1].gd.view(-1,2), states[-1][1][-1].gd.view(-1,2)]
+        
+        # adding noise
+        noise1 = torch.zeros_like(self.__target[0])
+        noise1[3:-1,:] = 0.1 * torch.rand_like(self.__target[0][3:-1,:])
+        self.__target[0] = self.__target[0]+ noise1
+        noise2 = torch.zeros_like(self.__target[1])
+        noise2[1:9,:] = 0.1 * torch.rand_like(self.__target[1][1:9,:])
+        self.__target[1] = self.__target[1] + noise2
+        
+        self.__source = [states[0][0][-1].gd.view(-1,2), states[0][1][-1].gd.view(-1,2)] 
+        
+            
     def intersection(self):
         l=[]
         l1 = [self.source[0][i,:] for i in range(len(self.source[0]))]
         l2 = [self.source[1][i,:] for i in range(len(self.source[0]))]
-        #print(self.source[0])
-        #print(self.source[1])
         for x in l1:
             for y in l2:
                 if torch.all(torch.eq(x,y)):
@@ -211,13 +249,31 @@ class part_rigid(RegistrationData):
         
         for i in range(2):
             man = dm.manifold.Landmarks(2, len(self.__source[i]), gd=self.__source[i].view(-1))
-            rot = dm.deformationmodules.GlobalRotation(man, sigma=20)
-            trans = dm.deformationmodules.GlobalTranslation(man, sigma=20)
+            rot = dm.deformationmodules.GlobalRotation(man.copy(), sigma=2., coeff=0.5)
+            trans = dm.deformationmodules.GlobalTranslation(man.copy(), sigma=20.,coeff=2.)
+            trans1 = dm.deformationmodules.Translations(man_silent.copy(), sigma=0.1, coeff=5.)
             trans.fill_controls_zero()
-            silent = dm.deformationmodules.SilentPoints(man_silent)
+            silent = dm.deformationmodules.SilentPoints(man_silent.copy())
             silent_source = dm.deformationmodules.SilentPoints(dm.manifold.Landmarks(2, len(self.__source[i]), gd=self.__source[i].view(-1)))
-            mod = dm.deformationmodules.CompoundModule([silent, rot, trans, silent_source])
+            mod = dm.deformationmodules.CompoundModule([silent, trans, rot, trans1, silent_source])
             self.__modules.append(mod)
+            
+    def grid_label(self, xmin, xmax, ymin, ymax, dx, dy):
+        """ returns grid and labels for each gridpoint """
+        x, y = torch.meshgrid([torch.arange(xmin, xmax, dx), torch.arange(ymin, ymax, dy)])
+        nx, ny = x.shape[0], x.shape[1] 
+
+        gridpoints = dm.usefulfunctions.grid2vec(x, y).type(torch.DoubleTensor)
+
+        label = torch.zeros(len(gridpoints))
+        
+        for shape, i in zip(self.__source, list(range(len(self.__source)+1))):
+            print(i, torch.sum(is_inside_shape(shape, gridpoints)))
+            
+            label[is_inside_shape(shape, gridpoints) == 1] = i+1
+        label[label==0] = -1
+        return x, y, label.view(x.shape)
+        
             
         
 class organs(RegistrationData):

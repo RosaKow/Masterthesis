@@ -35,13 +35,14 @@ class DeformationModule:
 
 class Translations(DeformationModule):
     """Module generating sum of translations."""
-    def __init__(self, manifold, sigma):
+    def __init__(self, manifold, sigma, coeff=1.):
         #assert isinstance(manifold, Landmarks)
         super().__init__()
         self.__manifold = manifold
         self.__sigma = sigma
         self.__dim_controls = self.__manifold.dim*self.__manifold.nb_pts
         self.__controls = torch.zeros(self.__dim_controls, requires_grad=True)
+        self.__coeff = coeff
 
     @classmethod
     def build_and_fill(cls, dim, nb_pts, sigma, gd=None, tan=None, cotan=None):
@@ -55,6 +56,10 @@ class Translations(DeformationModule):
     @property
     def sigma(self):
         return self.__sigma
+
+    @property
+    def coeff(self):
+        return self.__coeff
 
     @property
     def dim_controls(self):
@@ -81,13 +86,13 @@ class Translations(DeformationModule):
         """Returns the cost."""
         K_q = K_xx(self.manifold.gd.view(-1, self.__manifold.dim), self.__sigma)
         m = torch.mm(K_q, self.__controls.view(-1, self.__manifold.dim))
-        return 0.5*torch.dot(m.view(-1), self.__controls.view(-1))
+        return 0.5*self.__coeff*torch.dot(m.view(-1), self.__controls.view(-1))
 
     def compute_geodesic_control(self, man):
         """Computes geodesic control from StructuredField vs."""
         vs = self.adjoint(man)
         K_q = K_xx(self.manifold.gd.view(-1, self.__manifold.dim), self.__sigma)
-        controls, _ = torch.gesv(vs(self.manifold.gd.view(-1, self.manifold.dim)), K_q)
+        controls, _ = torch.gesv(vs(self.manifold.gd.view(-1, self.manifold.dim)), self.__coeff * K_q)
         self.__controls = controls.contiguous().view(-1)
         
     def compute_geodesic_control_from_self(self, manifold):
@@ -108,7 +113,7 @@ class Translations(DeformationModule):
         return kronecker_I2(K_xx(self.manifold.gd.view(-1, self.__manifold.dim), self.__sigma))
     
     def costop_inv(self):
-        return torch.eye(self.__dim_controls)
+        return (1. / self.__coeff) * torch.eye(self.__dim_controls)
 
 class SilentPoints(DeformationModule):
     """Module handling silent points."""
@@ -282,6 +287,8 @@ class CompoundModule(DeformationModule, Iterable):
                 actionmat[:,tmp+i] = torch.cat(self.manifold.manifold_list[0].action(self.module_list[m]).unroll_tan())
             tmp = tmp + list(self.module_list[m].controls.shape)[0]
         #A = torch.mm(actionmat, torch.transpose(actionmat, 0,1))
+        
+        print(actionmat.shape, self.costop_inv().shape)
         A = torch.mm(actionmat, torch.mm(self.costop_inv(), torch.transpose(actionmat, 0,1)))
         return A
     
@@ -307,7 +314,6 @@ class Background(DeformationModule):
 
         if (boundary_labels==None):
             self.__manifold = CompoundManifold([m.manifold.copy(retain_grad=True) for m in self.__module_list]) 
-        
         else:
             man_list = []
             dim = module_list[0].manifold.dim
@@ -320,7 +326,7 @@ class Background(DeformationModule):
                 else:
                     raise NotImplementedError
             self.__manifold = CompoundManifold(man_list)
-            
+        
         self.__controls = [ man.roll_gd([torch.zeros(x.shape) for x in man.unroll_gd()]) for man in self.__manifold.manifold_list ] 
         self.__sigma = sigma
         
@@ -413,18 +419,76 @@ class Background(DeformationModule):
     
     def costop_inv(self):
         return self.K_q()
+    
+    
+class Background_reduced(Background):
+    def __init__(self, module_list, sigma, boundary_labels=None):
+        import copy
+        dim = module_list[0].manifold.dim
         
+        # reduce set of gd so that each points appears only once
+        gd = [m.manifold.gd for m in module_list]
+        eps = sigma/10.
+        print('eps', eps)
+        print('sigma',sigma)
+
+        reduced_gd_list = [gd[0].view(-1,dim)[0,:].tolist()]
+        indices = []
+        n=0
+        appended = False
+        for a in gd:
+            a = a.view(-1,dim)
+            indices.append([])
+            
+            for i in range(len(a)):
+                for p in reduced_gd_list:
+                    if torch.norm(a[i,:] - torch.tensor(p)) < eps:
+                        indices[-1].append(reduced_gd_list.index(p))
+                        appended = True
+                        break
+                if not appended:
+                    reduced_gd_list.append(a[i,:].tolist())
+                    indices[-1].append(n)
+                    n = n+1
+                appended = False
+            reduced_gd = torch.tensor(reduced_gd_list)
+
+        nb_pts = len(reduced_gd)
+        manifold_reduced = Landmarks(dim, nb_pts, gd = reduced_gd.view(-1))
+        module_reduced = SilentPoints(manifold_reduced)
+        
+        self.__indices = indices
+        self.__nb_pts = manifold_reduced.nb_pts
+        self.__nb_pts_modules = sum([mod.manifold.nb_pts for mod in module_list])
+        super().__init__([module_reduced], sigma, boundary_labels)
+        
+    @property
+    def indices(self):
+        return self.__indices
+    
+    
+    def ind_matrix(self):
+        ind = torch.tensor([*self.__indices]).view(-1)
+        ind_matrix = torch.zeros(self.__nb_pts_modules, self.__nb_pts)
+                
+        for i in range(self.__nb_pts_modules):
+            ind_matrix[i, ind[i]] = 1
+            
+        return ind_matrix
+
+
         
 class GlobalTranslation(DeformationModule):
     ''' Global Translation Module for Multishapes
         Corresponds to a Translation Module where the translation is carried by the mean value of geometric descriptors'''
-    def __init__(self, manifold, sigma):
+    def __init__(self, manifold, sigma, coeff=1.):
         super().__init__()
         self.__sigma = sigma
+        self.__coeff = coeff
         self.__dim = manifold.dim
         self.__manifold = manifold
         self.__manifold_trans = Landmarks(manifold.dim, 1)
-        self.__translationmodule = Translations(self.__manifold_trans, sigma)
+        self.__translationmodule = Translations(self.__manifold_trans, sigma, coeff)
    
     @property
     def manifold(self):
@@ -433,6 +497,10 @@ class GlobalTranslation(DeformationModule):
     @property
     def sigma(self):
         return self.__sigma
+    
+    @property
+    def coeff(self):
+        return self.__coeff
     
     @property
     def dim_controls(self):
@@ -466,13 +534,13 @@ class GlobalTranslation(DeformationModule):
 
     def cost(self) :
         """Returns the cost."""
-        return self.__translationmodule.cost()
+        return self.__coeff * self.__translationmodule.cost()
 
     def compute_geodesic_control(self, man):
         """Computes geodesic control from StructuredField."""
         self.__translationmodule.manifold.fill_gd(self.z().view(-1))
         self.__translationmodule.compute_geodesic_control(man) 
-        self.__controls = self.__translationmodule.controls
+        self.fill_controls(self.__translationmodule.controls)
 
     def compute_geodesic_control_from_self(self, manifold):
         """ Computes geodesic control on self.manifold"""
@@ -489,7 +557,7 @@ class GlobalTranslation(DeformationModule):
         return kronecker_I2(torch.mm(K, torch.transpose(K,0,1)))
     
     def costop_inv(self):
-        return torch.eye(self.dim_controls)
+        return (1./self.__coeff) * torch.eye(self.dim_controls)
 
     
 class LocalConstraintTranslation(DeformationModule):
@@ -537,7 +605,21 @@ class LocalConstraintTranslation(DeformationModule):
     
     def __call__(self, points) :
         """Applies the generated vector field on given points."""
-        return self.field_generator()(points)
+        gd = self.__manifold.gd.view(-1, 2)
+        pts = self.__f_support(gd)
+        #cont = self.__controls * self.__vectorgen(gd)
+        
+        #pts = self.__manifold.gd.view(-1, 2)
+        cont = self.__controls * self.f_vector(gd)
+        
+        
+        #manifold_Landmark = Landmarks(self.__manifold.dim, self.__manifold.dim + 1, gd=self.__supportgen(gd).view(-1))
+        #Trans = Translations(manifold_Landmark, self.__sigma)
+        #Trans.fill_controls(self.__controls * self.__vectorgen(gd))
+        K_q = K_xy(points, pts, self.__sigma)
+        return torch.mm(K_q, cont)
+        
+        #return self.field_generator()(points)
  
     def cost(self) :
         """Returns the cost."""
@@ -598,9 +680,10 @@ class LocalRotation(LocalConstraintTranslation):
         
         
 class GlobalConstraintTranslation(DeformationModule):
-    def __init__(self, manifold, sigma, f_support, f_vectors):
+    def __init__(self, manifold, sigma, f_support, f_vectors, coeff=1.):
         self.__manifold = manifold
         self.__sigma = sigma
+        self.__coeff = coeff
         self.__controls = torch.tensor([1.], requires_grad=True)
         self.__f_support = f_support
         self.__f_vectors = f_vectors
@@ -630,6 +713,10 @@ class GlobalConstraintTranslation(DeformationModule):
         return self.__sigma
     
     @property
+    def coeff(self):
+        return self.__coeff
+    
+    @property
     def dim_controls(self):
         return 1
 
@@ -652,18 +739,24 @@ class GlobalConstraintTranslation(DeformationModule):
     
     def __call__(self, points) :
         """Applies the generated vector field on given points."""
+        gd = self.__manifold.gd.view(-1,self.__manifold.dim)
+        me = torch.mean(gd.view(-1,self.__manifold.dim),0)
+        self.__localTranslation.manifold.fill_gd(me.view(1,self.__manifold.dim).view(-1))  
         return self.__localTranslation.field_generator()(points)
  
     def cost(self) :
         """Returns the cost."""
-        return self.__localTranslation.cost()
+        gd = self.__manifold.gd.view(-1,self.__manifold.dim)
+        me = torch.mean(gd.view(-1,self.__manifold.dim),0)
+        self.__localTranslation.manifold.fill_gd(me.view(1,self.__manifold.dim).view(-1))  
+        return self.__coeff * self.__localTranslation.cost()
     
     def compute_geodesic_control(self, man):
         """Computes geodesic control from StructuredField."""
         self.fill_controls(1)
         #controls = torch.mm(self.field_generator()(man.gd.view(-1,self.manifold.dim)).view(1,-1), man.cotan.view(-1,1))
         controls = man.inner_prod_field(self.field_generator())
-        self.__controls = controls.contiguous().view(-1)
+        self.fill_controls((1. / self.__coeff) * controls.contiguous().view(-1))
         
     def compute_geodesic_control_from_self(self, manifold):
         """ Computes geodesic control on self.manifold"""
@@ -672,6 +765,9 @@ class GlobalConstraintTranslation(DeformationModule):
         
     def field_generator(self):
         """  """
+        gd = self.__manifold.gd.view(-1,self.__manifold.dim)
+        me = torch.mean(gd.view(-1,self.__manifold.dim),0)
+        self.__localTranslation.manifold.fill_gd(me.view(1,self.__manifold.dim).view(-1))  
         return self.__localTranslation.field_generator()
     
     def autoaction(self):
@@ -681,11 +777,11 @@ class GlobalConstraintTranslation(DeformationModule):
         return torch.mm(K_q.view(-1,1), K_q.view(1,-1))
     
     def costop_inv(self):
-        return torch.eye(self.dim_controls)
+        return (1. / self.__coeff) * torch.eye(self.dim_controls)
 
     
 class GlobalScaling(GlobalConstraintTranslation):
-    def __init__(self, manifold, sigma):
+    def __init__(self, manifold, sigma, coeff=1.):
         
         def f_vectors(gd):
             pi = math.pi
@@ -695,10 +791,10 @@ class GlobalScaling(GlobalConstraintTranslation):
             gd = torch.mean(gd.view(-1,manifold.dim),0).view(1,manifold.dim).view(-1)
             return gd * torch.ones(3,manifold.dim) + sigma/3 * f_vectors(gd)
         
-        super().__init__(manifold, sigma, f_support, f_vectors)
+        super().__init__(manifold, sigma, f_support, f_vectors, coeff)
               
 class GlobalRotation(GlobalConstraintTranslation):
-    def __init__(self, manifold, sigma):
+    def __init__(self, manifold, sigma, coeff=1.):
         
         def f_support(gd):
             pi = math.pi
@@ -706,4 +802,118 @@ class GlobalRotation(GlobalConstraintTranslation):
         def f_vectors(gd):
             pi = math.pi
             return torch.tensor([[-math.sin(2*pi/3*(x)), math.cos(2*pi/3*(x))] for x in range(3)])
-        super().__init__(manifold, sigma, f_support, f_vectors)
+        super().__init__(manifold, sigma, f_support, f_vectors, coeff)
+        
+        
+class ConstrainedTranslations(DeformationModule):
+    """Module generating a local field via a sum of translations."""
+    
+    def __init__(self, manifold, support_generator, vector_generator, sigma, coeff=1):
+        assert isinstance(manifold, Landmarks)
+        super().__init__()
+        self.__manifold = manifold
+        self.__supportgen = support_generator
+        self.__vectorgen = vector_generator
+        self.__sigma = sigma
+        self.__dim_controls = 1
+        self.__controls = torch.zeros(self.__dim_controls, requires_grad=True)
+        self.__coeff = coeff
+        a = torch.sqrt(torch.tensor(3.))
+        self.__direc_scaling_pts = torch.tensor([[1., 0.], [-0.5 , 0.5* a],  [-0.5, -0.5* a]], requires_grad=True)
+        self.__direc_scaling_vec = torch.tensor([[1., 0.], [-0.5 , 0.5* a],  [-0.5, -0.5* a]], requires_grad=True)
+
+    
+    @classmethod
+    def build_from_points(cls, dim, nb_pts, sigma, gd=None, tan=None, cotan=None):
+        """Builds the Translations deformation module from tensors."""
+        return cls(Landmarks(dim, nb_pts, gd=gd, tan=tan, cotan=cotan), sigma)
+    
+    @property
+    def manifold(self):
+        return self.__manifold
+    
+    @property
+    def sigma(self):
+        return self.__sigma
+    
+    @property
+    def dim_controls(self):
+        return self.__dim_controls
+    
+    def __get_controls(self):
+        return self.__controls
+    
+    def fill_controls(self, controls):
+        self.__controls = controls
+    
+    controls = property(__get_controls, fill_controls)
+    
+    def fill_controls_zero(self):
+        self.__controls = torch.zeros(self.__dim_controls)
+    
+    def __call__(self, points):
+        """Applies the generated vector field on given points."""
+        gd = self.__manifold.gd.view(-1, 2)
+        pts = self.__supportgen(gd)
+        #cont = self.__controls * self.__vectorgen(gd)
+        
+        #pts = self.__manifold.gd.view(-1, 2)
+        cont = self.__controls * self.__vectorgen(gd)
+        
+        
+        #manifold_Landmark = Landmarks(self.__manifold.dim, self.__manifold.dim + 1, gd=self.__supportgen(gd).view(-1))
+        #Trans = Translations(manifold_Landmark, self.__sigma)
+        #Trans.fill_controls(self.__controls * self.__vectorgen(gd))
+        K_q = K_xy(points, pts, self.__sigma)
+        return torch.mm(K_q, cont)
+        
+    
+    def cost(self):
+        """Returns the cost."""
+        gd = self.__manifold.gd.view(-1, 2)
+        pts = self.__supportgen(gd)
+        #cont = self.__controls * self.__vectorgen(gd)
+        
+        
+        #pts = self.__manifold.gd.view(-1, 2)
+        cont = self.__controls * self.__vectorgen(gd)
+        
+        
+        
+        K_q = K_xx(pts, self.__sigma)
+        m = torch.mm(K_q, cont)
+        #manifold_Landmark = Landmarks(self.__manifold.dim, self.__manifold.dim + 1, gd=self.__supportgen(gd).view(-1))
+        #Trans = Translations(manifold_Landmark, self.__sigma)
+        #Trans.fill_controls(self.__controls * self.__vectorgen(gd))
+        return  0.5 * torch.dot(m.view(-1), cont.view(-1))
+        #return self.__coeff * Trans.cost()
+    
+    def compute_geodesic_control(self, man):
+        """Computes geodesic control from StructuredField vs."""
+        #self.__controls = torch.tensor(1., dtype=self.__manifold.gd.dtype, requires_grad=True)
+        #cost_1 = self.cost()
+        #v = self.field_generator()
+        gd = self.__manifold.gd.view(-1, 2)
+        pts = self.__supportgen(gd)
+        v = StructuredField_0(pts,
+                                 self.__vectorgen(gd), self.__sigma)
+        apply = man.inner_prod_field(v)
+        self.fill_controls(2 * apply.contiguous())
+        #gd = self.__manifold.gd.view(-1, 2)
+        #self.__controls =torch.sum(self.__supportgen(gd)**2)
+    
+    def field_generator(self):
+        gd = self.__manifold.gd.view(-1, 2)
+        pts = self.__supportgen(gd)
+        #manifold_Landmark = Landmarks(self.__manifold.dim, self.__manifold.dim + 1, gd=self.__supportgen(gd).view(-1))
+        #Trans = Translations(manifold_Landmark, self.__sigma)
+        #Trans.fill_controls(self.__controls * self.__vectorgen(gd))
+
+        #return Trans.field_generator()
+        #return StructuredField_0(self.__supportgen(gd),
+        #                        self.__controls *self.__vectorgen(gd), self.__sigma)
+        return StructuredField_0(pts,
+                                 self.__controls * self.__vectorgen(gd), self.__sigma)
+
+    def adjoint(self, manifold):
+        return manifold.cot_to_vs(self.__sigma)

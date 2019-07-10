@@ -1,5 +1,7 @@
 import torch
 import numpy as np
+from .multimodule_usefulfunctions import kronecker_I2
+
 
 
 class Constraints():
@@ -81,6 +83,45 @@ class Identity_Silent(Constraints):
                             
         for i in range(len(modules.module_list) -1):
             gd_bg = modules.manifold.manifold_list[-1].gd_points()[i]
+            # field i is applied to the silent points that correspond to the ith boundary 
+            constr = torch.cat([constr, fields[i](modules.module_list[i].module_list[0].manifold.gd.view(-1,2))
+                                - field_bg(gd_bg)], 0)        
+        return constr
+
+class Identity_Silent_reduced(Constraints):
+    def __init__(self):
+        """ manifold must be a compound manifold of m+1 manifolds, the last one being Landmarks where the gd appear only once
+        gd are assumed to be flattened"""
+        super().__init__()
+       
+    def constraintsmatrix(self, modules):
+        """ Matrix that corresponds to the function g in C = g xi """
+        n = modules.module_list[0].manifold.manifold_list[0].numel_gd
+        G = torch.eye(n)
+        for i in range(len(modules.module_list)-2):
+            ni = modules.module_list[i+1].manifold.manifold_list[0].numel_gd
+            G = torch.cat([torch.cat([G, torch.zeros(n, ni)], 1), torch.cat([torch.zeros(ni, n), torch.eye(ni)], 1)], 0)
+            n = n + ni
+        G_bg = kronecker_I2(modules.background.ind_matrix())
+        G = torch.cat( [G, -G_bg], 1)   
+        return G
+    
+    def call_by_matmul(self, modules):
+        fields = modules.field_generator().fieldlist
+        
+        action = torch.cat([ f(man.manifold_list[0].gd.view(-1,2)) for f,man in zip(fields, modules.manifold.manifold_list)]).view(-1,1)
+        
+        return  torch.mm(self.constraintsmatrix(modules), action)
+                
+    def __call__(self, modules):
+        ''' applies identity constraints on generated velocity field'''
+        constr = torch.tensor([])
+        fields = modules.field_generator().fieldlist
+        field_bg = fields[-1]
+                            
+        for i in range(len(modules.module_list) -1):
+            ind = modules.background.indices[i]
+            gd_bg = modules.background.manifold.gd[0].view(-1,2)[ind,:]
             # field i is applied to the silent points that correspond to the ith boundary 
             constr = torch.cat([constr, fields[i](modules.module_list[i].module_list[0].manifold.gd.view(-1,2))
                                 - field_bg(gd_bg)], 0)        
