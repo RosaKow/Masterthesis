@@ -288,7 +288,6 @@ class CompoundModule(DeformationModule, Iterable):
             tmp = tmp + list(self.module_list[m].controls.shape)[0]
         #A = torch.mm(actionmat, torch.transpose(actionmat, 0,1))
         
-        print(actionmat.shape, self.costop_inv().shape)
         A = torch.mm(actionmat, torch.mm(self.costop_inv(), torch.transpose(actionmat, 0,1)))
         return A
     
@@ -393,11 +392,11 @@ class Background(DeformationModule):
         return cost
              
     def field_generator(self):
-        man = self.manifold.copy()
-        man.fill_gd(self.manifold.gd)
+        man = self.manifold.copy(retain_grad=True)
+        man.fill_gd(self.manifold.gd, copy=True, retain_grad=True)
         #for i in range(len(self.module_list)):
         #    man[i].fill_cotan(self.__controls[i].view(-1))
-        man.fill_cotan(self.__controls)
+        man.fill_cotan(self.__controls, copy=True, retain_grad=True)
         return man.cot_to_vs(self.__sigma)
     
     def compute_geodesic_control_from_self(self, manifold):
@@ -428,7 +427,7 @@ class Background_reduced(Background):
         
         # reduce set of gd so that each points appears only once
         gd = [m.manifold.gd for m in module_list]
-        eps = sigma/10.
+        eps = sigma/10.  ### is this a good choice???
         print('eps', eps)
         print('sigma',sigma)
 
@@ -507,7 +506,7 @@ class GlobalTranslation(DeformationModule):
         return self.__dim
 
     def __get_controls(self):
-        return self.__controls
+        return self.__translationmodule.controls
 
     def fill_controls(self, controls):
         self.__controls = controls
@@ -610,7 +609,7 @@ class LocalConstraintTranslation(DeformationModule):
         #cont = self.__controls * self.__vectorgen(gd)
         
         #pts = self.__manifold.gd.view(-1, 2)
-        cont = self.__controls * self.f_vector(gd)
+        cont = self.__controls * self.__f_vectors(gd)
         
         
         #manifold_Landmark = Landmarks(self.__manifold.dim, self.__manifold.dim + 1, gd=self.__supportgen(gd).view(-1))

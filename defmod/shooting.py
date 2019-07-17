@@ -46,7 +46,7 @@ def shoot_euler(h, it):
         mod.manifold.fill(intermediate_states[0])
               
         print('d_gd field generator__________________')
-        print(mod.field_generator()(mod.manifold.gd))
+        print('field(points)',mod.field_generator()(mod.manifold.gd_points()))
         
         print('========================================')
         

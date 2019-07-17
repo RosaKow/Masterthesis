@@ -21,10 +21,7 @@ class MultiShapeModule(torch.nn.Module):
         self.__silent_list = [mod.module_list[0].copy() for mod in module_list]
         
         if reduce_background:
-            print('reduced')
             self.__background = dm.deformationmodules.Background_reduced(self.__silent_list, self.__sigma_background, boundary_labels)
-            print(self.__silent_list)
-            print('red background gd',self.__background.manifold.gd)
         else:
             self.__background = dm.deformationmodules.Background(self.__silent_list, self.__sigma_background, boundary_labels)
             
