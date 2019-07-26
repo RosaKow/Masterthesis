@@ -71,7 +71,7 @@ class Identity_Silent(Constraints):
         fields = modules.field_generator().fieldlist
         
         action = torch.cat([*[ f(man.manifold_list[0].gd.view(-1,2)) for f,man in zip(fields[:-1], modules.manifold.manifold_list[:-1])],
-                  *[fields[-1](torch.cat(modules.manifold.manifold_list[-1].gd_points()))]]).view(-1,1)
+                  *[fields[-1](torch.cat(modules.background.manifold.gd_points()))]]).view(-1,1)
         
         return  torch.mm(self.constraintsmatrix(modules), action)
                 
@@ -82,7 +82,7 @@ class Identity_Silent(Constraints):
         field_bg = fields[-1]
                             
         for i in range(len(modules.module_list) -1):
-            gd_bg = modules.manifold.manifold_list[-1].gd_points()[i]
+            gd_bg = modules.background.manifold.gd_points()[i]
             # field i is applied to the silent points that correspond to the ith boundary 
             constr = torch.cat([constr, fields[i](modules.module_list[i].module_list[0].manifold.gd.view(-1,2))
                                 - field_bg(gd_bg)], 0)        

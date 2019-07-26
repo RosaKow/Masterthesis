@@ -36,4 +36,4 @@ class Hamiltonian_multi:
     def apply_constr(self):
         """ Apply Constraints on the generated vectorfields"""
         appl_constr = torch.dot(self.__modules.l.view(-1,1).squeeze(), self.__constr(self.__modules).view(-1,1).squeeze())
-        return (appl_constr)
+        return appl_constr

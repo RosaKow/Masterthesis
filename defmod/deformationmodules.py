@@ -10,7 +10,7 @@ from .manifold import Landmarks, CompoundManifold
 
 from .usefulfunctions import make_grad_graph
 
-from .multimodule_usefulfunctions import kronecker_I2, CirclePoints
+from .multimodule_usefulfunctions import kronecker_I2, CirclePoints, block_diag
 import math
 
 
@@ -21,8 +21,9 @@ class DeformationModule:
     def __init__(self):
         super().__init__()
 
-    def copy(self):
-        return copy.copy(self)
+    #def copy(self):
+    #    ''' This does not copy the manifold!'''
+    #    return copy.copy(self)
 
     def __call__(self, gd, controls, points):
         """Applies the generated vector field on given points."""
@@ -60,6 +61,14 @@ class Translations(DeformationModule):
     @property
     def coeff(self):
         return self.__coeff
+    
+    def copy(self, retain_grad=False):
+        mod_copy = Translations(self.__manifold.copy(retain_grad=retain_grad), self.__sigma, self.__coeff)
+        if retain_grad==True:
+            mod_copy.fill_controls(self.__controls.clone())
+        elif retain_grad==False:
+            mod_copy.fill_controls(self.__controls.detach().clone().requires_grad_())   
+        return mod_copy
 
     @property
     def dim_controls(self):
@@ -75,6 +84,16 @@ class Translations(DeformationModule):
 
     def fill_controls_zero(self):
         self.__controls = torch.zeros(self.__dim_controls)
+    
+    @property
+    def numel_controls(self):
+        return self.__controls.shape[0]
+    
+    def unroll_controls(self):
+        return [self.controls]
+    
+    def roll_controls(self, l):
+        return l.pop(0)
 
     def __call__(self, points):
         #return self.field_generator().Apply(points)
@@ -136,6 +155,9 @@ class SilentPoints(DeformationModule):
         return self.__manifold
     
 
+    def copy(self, retain_grad=False):
+        return SilentPoints(self.__manifold.copy(retain_grad=retain_grad))
+        
     def __get_controls(self):
         return torch.tensor([], requires_grad=True)
 
@@ -170,6 +192,9 @@ class SilentPoints(DeformationModule):
 
     def costop_inv(self):
         return torch.tensor([])
+    
+    def autoaction(self):
+        return torch.tensor([])
 
 class CompoundModule(DeformationModule, Iterable):
     """Combination of modules."""
@@ -177,14 +202,17 @@ class CompoundModule(DeformationModule, Iterable):
         assert isinstance(module_list, Iterable)
         super().__init__()
         self.__module_list = []
-        self.numel_controls = 0
+        #self.numel_controls = 0
         for mod in module_list:
             if isinstance(mod, CompoundModule):
                 self.__module_list.extend(mod.module_list)
-                self.numel_controls = self.numel_controls + mod.numel_controls
+                #self.numel_controls = self.numel_controls + mod.numel_controls
             else:
                 self.__module_list.append(mod)
-                self.numel_controls = self.numel_controls + list(mod.controls.shape)[0]
+                #self.numel_controls = self.numel_controls + mod.numel_controls                
+            #else:
+            #    self.__module_list.append(mod)
+            #    self.numel_controls = self.numel_controls + list(mod.controls.shape)[0]
             
     @property
     def module_list(self):
@@ -204,6 +232,11 @@ class CompoundModule(DeformationModule, Iterable):
             self.current = self.current + 1
             return self.__module_list[self.current - 1]
 
+    def copy(self, retain_grad=False):
+        mod_copy = CompoundModule([m.copy(retain_grad=retain_grad) for m in self.__module_list])
+        #mod_copy.fill_controls(self.__controls)
+        return mod_copy
+    
     @property
     def nb_module(self):
         return len(self.__module_list)
@@ -225,6 +258,18 @@ class CompoundModule(DeformationModule, Iterable):
     def fill_controls_zero(self):
         for m in self.__module_list:
             m.fill_controls_zero()
+            
+    def unroll_controls(self):
+        l = []
+        for mod in self.__module_list:
+            l.extend(mod.unroll_controls())
+        return l
+    
+    def roll_controls(self, l):
+        out = []
+        for mod in self.__module_list:
+            out.append(mod.roll_controls(l))
+        return out
 
     @property
     def manifold(self):
@@ -253,13 +298,14 @@ class CompoundModule(DeformationModule, Iterable):
 
     def compute_geodesic_control_from_self(self, manifold):
         """ Computes geodesic control on self.manifold"""
-        self.compute_geodesic_control(manifold)
+        #self.compute_geodesic_control(manifold)
+        for i in range(self.nb_module):
+            self.__module_list[i].compute_geodesic_control(manifold)
             
     def field_generator(self):
         return CompoundStructuredField([m.field_generator() for m in self.__module_list])
     
     def autoaction(self):
-        """ only if cost operator = Id """
         actionmat = torch.zeros(self.manifold.numel_gd, self.numel_controls)
         tmp = 0
         for m in range(len(self.module_list)):
@@ -270,13 +316,12 @@ class CompoundModule(DeformationModule, Iterable):
                 self.fill_controls(c)
                 actionmat[:,tmp+i] = torch.cat(self.manifold.action(self.module_list[m]).unroll_tan())
             tmp = tmp + list(self.module_list[m].controls.shape)[0]
-        #A = torch.mm(actionmat, torch.transpose(actionmat, 0,1))
+       #A = torch.mm(actionmat, torch.transpose(actionmat, 0,1))
         A = torch.mm(actionmat, torch.mm(self.costop_inv(), torch.transpose(actionmat, 0,1)))
-
         return A
     
     def autoaction_silent(self):
-        actionmat = torch.zeros(self.manifold.manifold_list[0].numel_gd, self.numel_controls)
+        actionmat = torch.zeros(self.manifold.manifold_list[0].numel_gd, self.dim_controls)
         tmp = 0
         for m in range(len(self.module_list)):
             for i in range(list(self.module_list[m].controls.shape)[0]):
@@ -286,11 +331,36 @@ class CompoundModule(DeformationModule, Iterable):
                 self.fill_controls(c)
                 actionmat[:,tmp+i] = torch.cat(self.manifold.manifold_list[0].action(self.module_list[m]).unroll_tan())
             tmp = tmp + list(self.module_list[m].controls.shape)[0]
-        #A = torch.mm(actionmat, torch.transpose(actionmat, 0,1))
         
         A = torch.mm(actionmat, torch.mm(self.costop_inv(), torch.transpose(actionmat, 0,1)))
         return A
     
+    def autoaction_without_silentpoints(self):
+        # Silent Points are not taken into account for autoaction
+        man_list = []
+        
+        for mod in self.__module_list:
+            print(isinstance(mod, SilentPoints))
+            if not isinstance(mod, SilentPoints):
+                man_list.append(mod.manifold)
+        man_active = CompoundManifold(man_list)
+        actionmat = torch.zeros(man_active.numel_gd, self.dim_controls)
+        tmp = 0
+        for m in range(len(self.module_list)):
+            #for i in range(list(self.module_list[m].controls.shape)[0]):
+            for i in range(self.module_list[m].dim_controls):
+                self.fill_controls_zero()
+                c = self.unroll_controls()
+                c[m][i] = 1
+                self.fill_controls(self.roll_controls(c))
+                actionmat[:,tmp+i] = torch.cat(man_active.action(self.module_list[m]).unroll_tan())
+            tmp = tmp + self.module_list[m].dim_controls
+        #A = torch.mm(actionmat, torch.transpose(actionmat, 0,1))
+
+        A = torch.mm(actionmat, torch.mm(self.costop_inv(), torch.transpose(actionmat, 0,1)))
+
+        return A
+      
     def costop_inv(self):
         # blockdiagonal matrix of inverse cost operators of each module
         Z = self.module_list[0].costop_inv()
@@ -304,34 +374,24 @@ class CompoundModule(DeformationModule, Iterable):
     
 class Background(DeformationModule):
     """ Creates the background module for the multishape framework"""
-    def __init__(self, module_list, sigma, boundary_labels=None):
+    def __init__(self, module_list, sigma):
         import copy
         super().__init__()
+                                                   
+        self.__manifold = CompoundManifold([m.manifold.copy(retain_grad=True) for m in module_list]) 
+        self.__module_list = [Translations(man, sigma=sigma) for man in self.__manifold.manifold_list]
         
-        self.__module_list = [mod.copy() for mod in module_list]
-        self.__boundary_labels = boundary_labels
-
-        if (boundary_labels==None):
-            self.__manifold = CompoundManifold([m.manifold.copy(retain_grad=True) for m in self.__module_list]) 
-        else:
-            man_list = []
-            dim = module_list[0].manifold.dim
-            for mod, label in zip(module_list, boundary_labels):
-                if isinstance(mod.manifold, Landmarks):
-                    gd = mod.manifold.gd.view(-1,2)[np.where(label==1)[0].tolist(),:]
-                    man_list.append(Landmarks(dim, len(gd), gd.view(-1)))
-                #TODO:  elif isinstance(mod.manifold, CompoundModule):
-                    
-                else:
-                    raise NotImplementedError
-            self.__manifold = CompoundManifold(man_list)
-        
-        self.__controls = [ man.roll_gd([torch.zeros(x.shape) for x in man.unroll_gd()]) for man in self.__manifold.manifold_list ] 
+        #self.__controls = [ man.roll_gd([torch.zeros(x.shape) for x in man.unroll_gd()]) for man in self.__manifold.manifold_list ] 
+        self.__compoundtranslations = CompoundModule(self.__module_list)
+        self.__controls = self.__compoundtranslations.controls
         self.__sigma = sigma
         
     @property
     def module_list(self):
         return self.__module_list
+    
+    def copy(self):
+        return Background(self.__module_list, self.__sigma)
     
     @property
     def nb_module(self):
@@ -342,6 +402,14 @@ class Background(DeformationModule):
         return self.__manifold
     
     @property
+    def numel_controls(self):
+        return self.__compoundtranslations.numel_controls
+    
+    @property
+    def sigma(self):
+        return self.__sigma
+    
+    @property
     def dim_controls(self):
         if self.__boundary_labels==None:
             return sum([mod.manifold.numel_gd for mod in self.__module_list])
@@ -350,34 +418,41 @@ class Background(DeformationModule):
     
     @property 
     def dim(self):
-        return self.__module_list[0].manifold.dim
+        return self.__manifold.dim
 
     def __get_controls(self):
-        return self.__controls
+        return self.__compoundtranslations.controls
 
     def fill_controls(self, controls, copy=False):
-        assert len(controls) == self.nb_module
-        #for i in range(len(controls)):
-        #    if self.__boundary_labels == None:
-        #        assert controls[i].shape == self.__module_list[i].manifold.dim_gd  
-        #    else: 
-        #        assert controls[i].shape == self.manifold.dim * np.sum(self.__boundary_labels[i])
         if copy:
             for i in range(self.nb_module):
-                self.__controls[i] = controls[i].clone().detach().requires_grad_()
+                self.__compoundtranslations.fill_controls(controls[i].clone().detach().requires_grad_())
+        #if copy:
+        #    for i in range(self.nb_module):
+        #        self.__controls[i] = controls[i].clone().detach().requires_grad_()
         else:
-            for i in range(self.nb_module):
-                self.__controls = controls
-        
+            self.__compoundtranslations.fill_controls(controls)
+       
     def fill_controls_zero(self):
-        self.__controls = [ man.roll_gd([torch.zeros(x.shape) for x in man.unroll_gd()]) for man in self.__manifold.manifold_list ] 
+        self.__compoundtranslations.fill_controls_zero()
             
     controls = property(__get_controls, fill_controls)
     
+    def unroll_controls(self):
+        return [torch.cat(self.__controls)]
+    
+    def roll_controls(self, l):
+        out = []
+        t = 0
+        for i in range(len(self.__module_list)):
+            out.append(l[0][t: t+self.__controls[i].shape[0]])
+            t = t+self.__controls[i].shape[0]
+        return out
+    
 
     def __call__(self, points):
-        vs = self.field_generator()
-        return vs(points)
+        #vs = self.field_generator()
+        return self.__compoundtranslations(points)
     
     def K_q(self):
         """ Kernelmatrix which is used for cost and autoaction"""
@@ -392,12 +467,11 @@ class Background(DeformationModule):
         return cost
              
     def field_generator(self):
-        man = self.manifold.copy(retain_grad=True)
-        man.fill_gd(self.manifold.gd, copy=True, retain_grad=True)
-        #for i in range(len(self.module_list)):
-        #    man[i].fill_cotan(self.__controls[i].view(-1))
-        man.fill_cotan(self.__controls, copy=True, retain_grad=True)
-        return man.cot_to_vs(self.__sigma)
+        #man = self.manifold.copy()
+        #man.fill_gd(self.manifold.gd)
+        #man.fill_cotan(self.__controls)
+        #return man.cot_to_vs(self.__sigma)
+        return self.__compoundtranslations.field_generator()
     
     def compute_geodesic_control_from_self(self, manifold):
         """ assume man is of the same type and has the same gd as self.__man"""
@@ -417,17 +491,20 @@ class Background(DeformationModule):
         return kronecker_I2(self.K_q())
     
     def costop_inv(self):
-        return self.K_q()
+        return kronecker_I2(self.K_q())
+    
+    
+
     
     
 class Background_reduced(Background):
     def __init__(self, module_list, sigma, boundary_labels=None):
-        import copy
+        #import copy
         dim = module_list[0].manifold.dim
         
         # reduce set of gd so that each points appears only once
         gd = [m.manifold.gd for m in module_list]
-        eps = sigma/10.  ### is this a good choice???
+        eps = sigma/10.
         print('eps', eps)
         print('sigma',sigma)
 
@@ -489,6 +566,14 @@ class GlobalTranslation(DeformationModule):
         self.__manifold_trans = Landmarks(manifold.dim, 1)
         self.__translationmodule = Translations(self.__manifold_trans, sigma, coeff)
    
+    def copy(self, retain_grad=False):
+        mod_copy = GlobalTranslation(self.__manifold.copy(retain_grad=retain_grad), self.__sigma, self.__coeff)
+        if retain_grad==True:
+            mod_copy.fill_controls(self.__controls.clone())
+        elif retain_grad==False:
+            mod_copy.fill_controls(self.__controls.detach().clone().requires_grad_())    
+        return mod_copy
+    
     @property
     def manifold(self):
         return self.__manifold
@@ -517,6 +602,12 @@ class GlobalTranslation(DeformationModule):
     def fill_controls_zero(self):
         self.__controls = torch.zeros(self.dim_controls, requires_grad=True)
         self.__translationmodule.fill_controls_zero()
+    
+    def unroll_controls(self):
+        return [self.__controls]
+    
+    def roll_controls(self, l):
+        return l.pop(0)
         
     
     def __call__(self, points) :
@@ -571,6 +662,13 @@ class LocalConstraintTranslation(DeformationModule):
         self.__f_support = f_support
         self.__f_vectors = f_vectors
     
+    def copy(self, retain_grad=False):
+        mod_copy = LocalConstraintTranslation(self.__manifold.copy(retain_grad=retain_grad), self.__sigma, self.__f_support, self.__f_vectors)
+        if retain_grad==True:
+            mod_copy.fill_controls(self.__controls.clone())
+        elif retain_grad==False:
+            mod_copy.fill_controls(self.__controls.detach().clone().requires_grad_())   
+        return mod_copy
             
     @property
     def f_support(self):
@@ -600,7 +698,17 @@ class LocalConstraintTranslation(DeformationModule):
     controls = property(__get_controls, fill_controls)
     
     def fill_controls_zero(self):
-        self.__controls = torch.zeros(1, requires_grad=True)        
+        self.__controls = torch.zeros(1, requires_grad=True)  
+        
+    @property
+    def numel_controls(self):
+        return 1
+    
+    def unroll_controls(self):
+        return [self.__controls]
+    
+    def roll_controls(self, l):
+        return l.pop(0)
     
     def __call__(self, points) :
         """Applies the generated vector field on given points."""
@@ -609,7 +717,7 @@ class LocalConstraintTranslation(DeformationModule):
         #cont = self.__controls * self.__vectorgen(gd)
         
         #pts = self.__manifold.gd.view(-1, 2)
-        cont = self.__controls * self.__f_vectors(gd)
+        cont = self.__controls * self.f_vectors(gd)
         
         
         #manifold_Landmark = Landmarks(self.__manifold.dim, self.__manifold.dim + 1, gd=self.__supportgen(gd).view(-1))
@@ -717,6 +825,10 @@ class GlobalConstraintTranslation(DeformationModule):
     
     @property
     def dim_controls(self):
+        return 1
+    
+    @property
+    def numel_controls(self):
         return 1
 
     def __get_controls(self):
@@ -916,3 +1028,15 @@ class ConstrainedTranslations(DeformationModule):
 
     def adjoint(self, manifold):
         return manifold.cot_to_vs(self.__sigma)
+
+    def compute_geodesic_controls_from_self(self, man):
+        return self.compute_geodesic_control(man)
+    
+    def autoaction(self):
+        support = self.__supportgen(gd)
+        K_q = sum(K_xy(support.view(-1, self.__manifold.dim)[i,:], self.manifold.gd.view(-1, self.__manifold.dim), self.__sigma))
+
+        return torch.mm(K_q.view(2,1), K_q.view(1,2))
+    
+    def costop_inv(self):
+        return torch.eye(self.__dim_controls)

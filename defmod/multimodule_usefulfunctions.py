@@ -46,6 +46,30 @@ def list_points_in_region(points, points_in_region):
     return points_list
 
 ####################################################
+from shapely.geometry import Point
+from shapely.geometry.polygon import Polygon
+
+def gridpoints(xmin, xmax, ymin, ymax, dx, dy):
+    """ returns grid and labels for each gridpoint """
+    x, y = torch.meshgrid([torch.arange(xmin, xmax, dx), torch.arange(ymin, ymax, dy)])
+    nx, ny = x.shape[0], x.shape[1] 
+
+    return x,y, dm.usefulfunctions.grid2vec(x, y).type(torch.DoubleTensor)
+
+def point_labels(shapes, points):
+    label = -torch.ones(len(points))
+
+    pointlist = [Point(p) for p in points.numpy().reshape(-1,2)]
+
+    
+    for s, i in zip(shapes, list(range(len(shapes)))):  
+        polygon = Polygon(s.detach().numpy().reshape(-1,2))
+        contains_p = torch.tensor([polygon.contains(p) for p in pointlist])
+        label[contains_p == 1] = i
+    return label
+
+
+####################################################
 # Check if a point is in a convex polygon
 
 def point_side(origin, vec, pts):
@@ -92,6 +116,17 @@ def largeDeformation(modules, states, controls, points):
             phi[i] = phi[i] + 1/N * modules.module_list[i].field_generator()(phi[i])
     return phi
 
+def largeDeformation_unconstrained(module, states, controls, points):
+    """ compute large deformation of points"""
+    phi = points.clone()
+    N = len(states)-1
+    
+    for t in range(N):
+        module.manifold.fill(states[t])
+        module.fill_controls(controls[t])
+        phi = phi + 1/N * module.field_generator()(phi)
+    return phi
+
 import matplotlib.pyplot as plt
 def plot_grid(gridx,gridy, color='blue', figsize=(5,5), dpi=100):
     fig1 = plt.figure(figsize=figsize, dpi=dpi)  
@@ -111,9 +146,9 @@ def plot_MultiGrid(phi, grid, label):
     y = np.zeros(grid[1].shape)
     
     for i in range(grid[0].shape[0]):
-        for j in range(grid[0].shape[0]):
-            x[i,j] = phi[label[i,j].numpy().astype(int)-1][0][i,j]
-            y[i,j] = phi[label[i,j].numpy().astype(int)-1][1][i,j]
+        for j in range(grid[0].shape[1]):
+            x[i,j] = phi[label[i,j].numpy().astype(int)][0][i,j]
+            y[i,j] = phi[label[i,j].numpy().astype(int)][1][i,j]
             
     plot_grid(x, y, color='blue')
     return x,y
@@ -156,3 +191,26 @@ def kronecker_I2(K):
 
 def boollist2tensor(boollist):
     return torch.tensor(np.asarray(boollist).astype(np.uint8))
+
+
+
+#############################################
+
+def block_diag(blocklist):
+    n = sum([b.shape[0] for b in blocklist])
+    D = torch.zeros(n,n)
+    j = 0
+    for i in range(len(blocklist)):
+        m = j+blocklist[i].shape[0]
+        D[j:m, j:m] = blocklist[i]
+        j = m
+    return D
+
+def flatten(l):
+    out = []
+    for el in l:
+        if isinstance(el, list):
+            out.append(flatten(el))
+        else:
+            out.append(el)
+    return torch.cat(out)

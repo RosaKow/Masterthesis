@@ -6,6 +6,8 @@ from torchdiffeq import odeint as odeint
 from .usefulfunctions import make_grad_graph
 from .deformationmodules import SilentPoints
 from .manifold import Landmarks
+from .multishape_silentpoints import MultiShapeModule_silent
+import copy
 
 import defmod as dm
 
@@ -22,33 +24,30 @@ def shoot_euler(h, it):
 
     intermediate_states = [h.module.manifold.copy()]
     intermediate_controls = []
-    
-    print(h.module.manifold[-1].manifold_list)
-    
+        
     for i in range(it):
         h.geodesic_controls()
-        print('constr',h.constraints(h.module))
-        mod = h.module.copy()
+        #print('constr',h.constraints(h.module))
+        #mod = h.module.copy()
         
         #speed_action = [gdi.action(modulei).tan for gdi, modulei in zip(h.module.manifold.manifold_list, h.module)] 
         
         l = [*h.module.manifold.unroll_gd(), *h.module.manifold.unroll_cotan()]
         delta = grad(h(), l, create_graph=True, allow_unused=True)
-        # TODO: is list() necessary?      
         
         d_gd = h.module.manifold.roll_gd(list(delta[:int(len(delta)/2)]))
         d_mom = h.module.manifold.roll_cotan(list(delta[int(len(delta)/2):]))
         
         
-        print('d_gd Hamiltonian______________________')
-        print(d_gd)        
+        #print('d_gd Hamiltonian______________________')
+        #print(d_gd)        
         
-        mod.manifold.fill(intermediate_states[0])
+        #mod.manifold.fill(intermediate_states[0])
               
-        print('d_gd field generator__________________')
-        print('field(points)',mod.field_generator()(mod.manifold.gd_points()))
+        #print('d_gd field generator__________________')
+        #print(mod.field_generator()(mod.manifold.gd))
         
-        print('========================================')
+        #print('========================================')
         
  
         h.module.manifold.muladd_gd(d_mom, step)
@@ -60,18 +59,26 @@ def shoot_euler(h, it):
     return intermediate_states, intermediate_controls
 
 
+
 def shoot_euler_silent(h, points, it):
     step = 1. / it
      
-    compound_silent = []
-    for m in h.module.module_list:
-        compound_silent.append(dm.deformationmodules.CompoundModule([points, *m.module_list]))
-    H_silent = dm.hamiltonian_multishape.Hamiltonian_multi(dm.multishape.MultiShapeModule(compound_silent), h.constraints)
-    H_silent.module.module_list[-1].fill_controls([[],*h.module.module_list[-1].controls])
-
+    #compound_silent = []
+    #man_grid = dm.manifold.Landmarks(h.module.manifold.dim, nb_pts = len(points), gd=points.clone().view(-1).requires_grad_())
+    #SilentGrid = dm.deformationmodules.SilentPoints(man_grid)
+    #for m in h.module.module_list[:-1]:
+    #    compound_silent.append(dm.deformationmodules.CompoundModule([*m.module_list.copy(), SilentGrid.copy()]))
+    
+    multi_silent = MultiShapeModule_silent([m.copy() for m in h.module.module_list[:-1]], sigma_background = h.module.background.sigma, silentpoints=points)
+    multi_silent.fill_cotan_without_silentpoints(h.module.manifold.cotan)
+    
+    H_silent = dm.hamiltonian_multishape.Hamiltonian_multi(multi_silent, h.constraints)
+    H_silent.module.manifold.fill(H_silent.module.manifold.copy())
+    
     
     intermediate_states = [H_silent.module.manifold.copy()]
     intermediate_controls = []
+    intermediate_points = [points.view(-1) for i in range(len(H_silent.module.module_list)-1)]
     
     for i in range(it):
         H_silent.geodesic_controls()
@@ -81,16 +88,15 @@ def shoot_euler_silent(h, points, it):
         
         d_gd = H_silent.module.manifold.roll_gd(list(delta[:int(len(delta)/2)]))
         d_mom = H_silent.module.manifold.roll_cotan(list(delta[int(len(delta)/2):]))
- 
+
         H_silent.module.manifold.muladd_gd(d_mom, step)
         H_silent.module.manifold.muladd_cotan(d_gd, -step)
         
         intermediate_states.append(H_silent.module.manifold.copy())
-        intermediate_controls.append(H_silent.module.controls)
+        intermediate_controls.append(H_silent.module.controls.copy())
         
-        moved_points = [p + step*mod(p) for mod, p in zip(H_silent.module, intermediate_points[-1])]
-        intermediate_points.append()
-        
+    intermediate_points = [[intermediate_states[k][i][-1].gd.view(points.shape) for i in range(len(H_silent.module.manifold.manifold_list))] for k in range(it+1)]
+                
     return intermediate_states, intermediate_controls, intermediate_points
 
 def shoot_euler_controls(h, controls, it):

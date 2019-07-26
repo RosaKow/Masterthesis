@@ -88,13 +88,13 @@ class Landmarks(Manifold):
         return [self.__cotan]
 
     def roll_gd(self, l):
-        return l.copy().pop(0)
+        return l.pop(0)
 
     def roll_tan(self, l):
-        return l.copy().pop(0)
+        return l.pop(0)
 
     def roll_cotan(self, l):
-        return l.copy().pop(0)
+        return l.pop(0)
 
     def __get_gd(self):
         return self.__gd

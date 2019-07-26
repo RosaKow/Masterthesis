@@ -249,11 +249,11 @@ class part_rigid(RegistrationData):
         
         for i in range(2):
             man = dm.manifold.Landmarks(2, len(self.__source[i]), gd=self.__source[i].view(-1))
-            rot = dm.deformationmodules.GlobalRotation(man.copy(), sigma=2., coeff=0.5)
-            trans = dm.deformationmodules.GlobalTranslation(man.copy(), sigma=20.,coeff=2.)
-            trans1 = dm.deformationmodules.Translations(man_silent.copy(), sigma=0.1, coeff=5.)
+            rot = dm.deformationmodules.GlobalRotation(man.copy(retain_grad=True), sigma=2., coeff=0.5)
+            trans = dm.deformationmodules.GlobalTranslation(man.copy(retain_grad=True), sigma=20.,coeff=2.)
+            trans1 = dm.deformationmodules.Translations(man_silent.copy(retain_grad=True), sigma=0.1, coeff=5.)
             trans.fill_controls_zero()
-            silent = dm.deformationmodules.SilentPoints(man_silent.copy())
+            silent = dm.deformationmodules.SilentPoints(man_silent.copy(retain_grad=True))
             silent_source = dm.deformationmodules.SilentPoints(dm.manifold.Landmarks(2, len(self.__source[i]), gd=self.__source[i].view(-1)))
             mod = dm.deformationmodules.CompoundModule([silent, trans, rot, trans1, silent_source])
             self.__modules.append(mod)
@@ -371,3 +371,66 @@ class organs(RegistrationData):
         
 
         
+import pickle
+
+class Nuts(RegistrationData):
+    def __init__(self, sigma_scaling=1.):
+        super().__init__()
+        self.__source = None
+        self.__target = None
+        self.__modules = None
+        self.__sigma_scaling = sigma_scaling
+        
+    @property
+    def source(self):
+        return self.__source
+    
+    @property
+    def target(self):
+        return self.__target
+    
+    @property
+    def modules(self):
+        return self.__modules
+        
+    def close_loop(self, oc):
+        cc = np.zeros((np.shape(oc)[0]+1,2))
+        cc[0:-1,:] = oc
+        cc[-1][:] = oc[0][:]
+        return cc
+
+    def build_modules(self):
+        dty = torch.float64
+        gd0 = torch.tensor([-1., 0.], requires_grad=True, dtype=dty)
+        gd1 = torch.tensor([1., 0.], requires_grad=True, dtype=dty)
+        
+        nb_pts = self.__source[0].shape[0]
+        man_silent = dm.manifold.Landmarks(2, nb_pts, gd=self.__source[0].view(-1).requires_grad_())
+        man_scal1 = dm.manifold.Landmarks(2,1,gd=gd0)
+        man_scal2 = dm.manifold.Landmarks(2,1,gd=gd1)
+        
+        silent = dm.deformationmodules.SilentPoints(man_silent)
+        scal1 = dm.deformationmodules.LocalScaling(man_scal1, sigma = self.__sigma_scaling)
+        scal2 = dm.deformationmodules.LocalScaling(man_scal2, sigma = self.__sigma_scaling)
+        trans = dm.deformationmodules.Translations(dm.manifold.Landmarks(2,1,gd = torch.tensor([0.,0.]).view(-1).requires_grad_()), sigma=400, coeff=5.)
+
+        comp1 = dm.deformationmodules.CompoundModule([silent, scal1, scal2, trans])
+        
+        self.__modules = [comp1]
+            
+    def __call__(self):
+        dty = torch.float64
+        with open('../data/nuts/nutsdata.pickle', 'rb') as f:
+            lines, sigv, sig = pickle.load(f)
+            
+        source = torch.tensor(lines[0][::2], requires_grad=True, dtype=dty)[1:]
+        target = torch.tensor(lines[1][::2]  , requires_grad=True, dtype=dty)[1:]
+        num_target = 1
+
+        pts_source = source.detach().numpy()
+        pts_target = target.detach().numpy()
+        
+        self.__source = [source]
+        self.__target = [target]
+        
+        self.build_modules()        
