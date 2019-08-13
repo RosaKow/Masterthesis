@@ -186,7 +186,7 @@ class MultiShapeModule(torch.nn.Module):
         return A
     
     def autoaction_blockdiag(self):
-        ''' building autoaction mattrix by blockdiagonal'''
+        ''' building autoaction matrix by blockdiagonal'''
         blocklist = [m.autoaction() for m in self.__module_list]
         return block_diag(blocklist)
             
@@ -194,7 +194,7 @@ class MultiShapeModule(torch.nn.Module):
     
     def compute_geodesic_variables(self, constr):
         
-        self.compute_geodesic_control_from_self(self.manifold)
+        self.compute_geodesic_control(self.manifold)
 
         fields = self.field_generator().fieldlist
         constr_mat = constr.constraintsmatrix(self)
@@ -209,25 +209,39 @@ class MultiShapeModule(torch.nn.Module):
         self.fill_l(lambda_qp)
 
         tmp = torch.mm(torch.transpose(constr_mat,0,1), lambda_qp)
-        man = self.manifold.copy(retain_grad=True) 
+        
+        # build compound manifold of all silent points (that belong to the boundary constraints) and the background manifold
+        man_list = [man[0].copy(retain_grad=True) for man in self.manifold.manifold_list[:-1]]
+        man = dm.manifold.CompoundManifold([*man_list, self.background.manifold.copy(retain_grad=True)])
         
         c = 0
         for m in man.manifold_list[:-1]:
-            m.manifold_list[0].cotan = m.manifold_list[0].cotan - tmp[c:c+m.manifold_list[0].numel_gd].view(-1)
-            c = c+m.manifold_list[0].numel_gd
+            m.cotan = tmp[c:c+m.numel_gd].view(-1)
+            c = c+m.numel_gd
         for m in man.manifold_list[-1].manifold_list:
-            m.cotan = m.cotan - tmp[c:c+m.numel_gd].view(-1)
+            m.cotan = tmp[c:c+m.numel_gd].view(-1)
             c = c+m.numel_gd
         
-        self.compute_geodesic_control_from_self(man)
+        #self.compute_geodesic_control(man)
+        
+        for mod, m in zip(self.module_list, man.manifold_list):
+            mod.compute_geodesic_control(m)
+            h1 = mod.controls
+            mod.compute_geodesic_control(mod.manifold)
+            h2 = mod.controls
+            print('h1', h1)
+            print('h2', h2)
+            print('================')
+            mod.fill_controls([h1[i]- h2[i] for i in range(len(h1))])
+        
         h_qp = self.controls
                                         
         return lambda_qp, h_qp
       
     
     def compute_geodesic_control(self, manifold): 
-        for m in self.__module_list:
-            m.compute_geodesic_control(manifold)
+        for mod, man in zip(self.__module_list, manifold):
+            mod.compute_geodesic_control(man)
         self.fill_controls([m.controls for m in self.__module_list])
         
             

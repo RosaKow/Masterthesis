@@ -69,6 +69,7 @@ class Translations(DeformationModule):
         elif retain_grad==False:
             mod_copy.fill_controls(self.__controls.detach().clone().requires_grad_())   
         return mod_copy
+    
 
     @property
     def dim_controls(self):
@@ -96,13 +97,16 @@ class Translations(DeformationModule):
         return l.pop(0)
 
     def __call__(self, points):
-        #return self.field_generator().Apply(points)
-        """Applies the generated vector field on given points."""
+        #return self.field_generator()(points)
+        #"""Applies the generated vector field on given points."""
         K_q = K_xy(points, self.__manifold.gd.view(-1, self.__manifold.dim), self.__sigma)
         return torch.mm(K_q, self.__controls.view(-1, self.__manifold.dim))
 
+    def K_q(self):
+        return K_xx(self.manifold.gd.view(-1, self.__manifold.dim), self.__sigma)
+    
     def cost(self):
-        """Returns the cost."""
+        """Returns the cost (Norm of the vector field) """
         K_q = K_xx(self.manifold.gd.view(-1, self.__manifold.dim), self.__sigma)
         m = torch.mm(K_q, self.__controls.view(-1, self.__manifold.dim))
         return 0.5*self.__coeff*torch.dot(m.view(-1), self.__controls.view(-1))
@@ -116,8 +120,13 @@ class Translations(DeformationModule):
         
     def compute_geodesic_control_from_self(self, manifold):
         """ Computes geodesic control on manifold of same type as self.manifold"""
+        assert isinstance(manifold, Landmarks)
+        assert manifold.numel_gd==self.manifold.numel_gd
         # TODO check manifold has the same type as self.manifold
-        self.compute_geodesic_control(manifold)
+        # For the cost = Norm of vector field, the geodesic controls are the same as the cotan
+        # self.compute_geodesic_control(manifold)
+        self.fill_controls(manifold.cotan)
+
 
     def field_generator(self):
         return StructuredField_0(self.__manifold.gd.view(-1, self.__manifold.dim),
@@ -132,7 +141,10 @@ class Translations(DeformationModule):
         return kronecker_I2(K_xx(self.manifold.gd.view(-1, self.__manifold.dim), self.__sigma))
     
     def costop_inv(self):
-        return (1. / self.__coeff) * torch.eye(self.__dim_controls)
+        ''' Inverse Cost operator. corresponds to Kernel if the cost is the norm of the vector field'''
+        return (1. / self.coeff) * kronecker_I2(self.K_q())
+        # Cost opertor corresponds to Identity if the cost is the norm of the controls 
+        # return (1. / self.__coeff) * torch.eye(self.__dim_controls)
 
 class SilentPoints(DeformationModule):
     """Module handling silent points."""
@@ -300,7 +312,7 @@ class CompoundModule(DeformationModule, Iterable):
         """ Computes geodesic control on self.manifold"""
         #self.compute_geodesic_control(manifold)
         for i in range(self.nb_module):
-            self.__module_list[i].compute_geodesic_control(manifold)
+            self.__module_list[i].compute_geodesic_control(manifold[i])
             
     def field_generator(self):
         return CompoundStructuredField([m.field_generator() for m in self.__module_list])
@@ -323,6 +335,8 @@ class CompoundModule(DeformationModule, Iterable):
     def autoaction_silent(self):
         actionmat = torch.zeros(self.manifold.manifold_list[0].numel_gd, self.dim_controls)
         tmp = 0
+        
+        controls = self.controls
         for m in range(len(self.module_list)):
             for i in range(list(self.module_list[m].controls.shape)[0]):
                 self.fill_controls_zero()
@@ -332,6 +346,7 @@ class CompoundModule(DeformationModule, Iterable):
                 actionmat[:,tmp+i] = torch.cat(self.manifold.manifold_list[0].action(self.module_list[m]).unroll_tan())
             tmp = tmp + list(self.module_list[m].controls.shape)[0]
         
+        self.fill_controls(controls)
         A = torch.mm(actionmat, torch.mm(self.costop_inv(), torch.transpose(actionmat, 0,1)))
         return A
     
@@ -373,6 +388,147 @@ class CompoundModule(DeformationModule, Iterable):
         return Z
     
 class Background(DeformationModule):
+    """ Creates the background module for the multishape framework"""
+    def __init__(self, module_list, sigma, boundary_labels=None):
+        import copy
+        super().__init__()
+        
+        self.__module_list = [mod.copy() for mod in module_list]
+        self.__boundary_labels = boundary_labels
+
+        if (boundary_labels==None):
+            self.__manifold = CompoundManifold([m.manifold.copy(retain_grad=True) for m in self.__module_list]) 
+        else:
+            man_list = []
+            dim = module_list[0].manifold.dim
+            for mod, label in zip(module_list, boundary_labels):
+                if isinstance(mod.manifold, Landmarks):
+                    gd = mod.manifold.gd.view(-1,2)[np.where(label==1)[0].tolist(),:]
+                    man_list.append(Landmarks(dim, len(gd), gd.view(-1)))
+                #TODO:  elif isinstance(mod.manifold, CompoundModule):
+                    
+                else:
+                    raise NotImplementedError
+            self.__manifold = CompoundManifold(man_list)
+        
+        self.__controls = [ man.roll_gd([torch.zeros(x.shape, requires_grad=True) for x in man.unroll_gd()]) for man in self.__manifold.manifold_list ] 
+        self.__sigma = sigma
+        
+    @property
+    def module_list(self):
+        return self.__module_list
+    
+    @property
+    def nb_module(self):
+        return len(self.__module_list)
+
+    @property
+    def manifold(self):
+        return self.__manifold
+    
+    @property
+    def sigma(self):
+        return self.__sigma
+    
+    @property
+    def dim_controls(self):
+        if self.__boundary_labels==None:
+            return sum([mod.manifold.numel_gd for mod in self.__module_list])
+        else: 
+            return sum([np.sum(labels) for labels in self.__boundary_labels])
+    
+    @property 
+    def dim(self):
+        return self.__module_list[0].manifold.dim
+
+    def __get_controls(self):
+        return self.__controls
+
+    def fill_controls(self, controls, copy=False):
+        if isinstance(controls, torch.Tensor):
+            assert controls.shape[0] == self.manifold.numel_gd
+            cont_list = []
+            j = 0
+            for a in self.manifold.manifold_list:
+                cont_list.append(controls[j:j+a.numel_gd])
+            controls = cont_list
+                
+        assert len(controls) == self.nb_module
+        #for i in range(len(controls)):
+        #    if self.__boundary_labels == None:
+        #        assert controls[i].shape == self.__module_list[i].manifold.dim_gd  
+        #    else: 
+        #        assert controls[i].shape == self.manifold.dim * np.sum(self.__boundary_labels[i])
+        if copy:
+            for i in range(self.nb_module):
+                self.__controls[i] = controls[i].clone().detach().requires_grad_()
+        else:
+            for i in range(self.nb_module):
+                self.__controls = controls
+        
+    def fill_controls_zero(self):
+        self.__controls = [ man.roll_gd([torch.zeros(x.shape) for x in man.unroll_gd()]) for man in self.__manifold.manifold_list ] 
+            
+    controls = property(__get_controls, fill_controls)
+    
+
+    def __call__(self, points):
+        vs = self.field_generator()
+        return vs(points)
+    
+    def K_q(self):
+        """ Kernelmatrix which is used for cost and autoaction"""
+        return K_xx(torch.cat(self.manifold.unroll_gd()).view(-1, self.dim), self.__sigma)
+    
+    def cost(self):
+        """Returns the cost (Norm of the generated vector field)"""
+        cont = torch.cat(self.controls)
+        K_q = self.K_q()
+        m = torch.mm(K_q, cont.view(-1, self.dim))
+        cost = 0.5*torch.dot(m.view(-1), cont.view(-1))
+        return cost
+             
+    def field_generator(self):
+        man = self.manifold.copy()
+        man.fill_gd(self.manifold.gd)
+        #for i in range(len(self.module_list)):
+        #    man[i].fill_cotan(self.__controls[i].view(-1))
+        man.fill_cotan(self.__controls)
+        return man.cot_to_vs(self.__sigma)
+    
+    def compute_geodesic_control_from_self(self, manifold):
+        """ assume man is of the same type and has the same gd as self.__man"""
+        # TODO: check manifold and self.manifold have the same type
+        self.fill_controls(manifold.cotan.copy())   
+        
+    #def compute_geodesic_control(self, man):
+    #    """ assume man is of the same type and has the same gd as self.__man"""
+    #    raise NotImplementedError
+        
+    def compute_geodesic_control(self, man):
+        """Computes geodesic control from StructuredField vs."""
+        vs = self.adjoint(man)
+        K_q = K_xx(torch.cat(self.manifold.gd).view(-1, self.__manifold.dim), self.__sigma)
+        controls, _ = torch.gesv(vs(torch.cat(self.manifold.gd).view(-1, self.manifold.dim)), K_q)
+        
+        self.fill_controls(controls.contiguous().view(-1))
+        
+    def autoaction(self):
+        """ computes matrix for autoaction = xi zeta Z^-1 zeta^\ast xi^\ast """
+        return kronecker_I2(self.K_q())
+    
+    def autoaction_silent(self):
+        """ computes matrix for autoaction = xi zeta Z^-1 zeta^\ast xi^\ast """
+        return kronecker_I2(self.K_q())
+    
+    def costop_inv(self):
+        return kronecker_I2(self.K_q())
+    
+    def adjoint(self, manifold):
+        return manifold.cot_to_vs(self.__sigma)
+        
+    
+class Background_bug(DeformationModule):
     """ Creates the background module for the multishape framework"""
     def __init__(self, module_list, sigma):
         import copy
@@ -451,8 +607,9 @@ class Background(DeformationModule):
     
 
     def __call__(self, points):
-        #vs = self.field_generator()
-        return self.__compoundtranslations(points)
+        vs = self.field_generator()
+        return vs(points)
+        #return self.__compoundtranslations(points)
     
     def K_q(self):
         """ Kernelmatrix which is used for cost and autoaction"""
@@ -466,12 +623,20 @@ class Background(DeformationModule):
         cost = 0.5*torch.dot(m.view(-1), cont.view(-1))
         return cost
              
-    def field_generator(self):
+    def field_generator_bug(self):
         #man = self.manifold.copy()
         #man.fill_gd(self.manifold.gd)
         #man.fill_cotan(self.__controls)
         #return man.cot_to_vs(self.__sigma)
         return self.__compoundtranslations.field_generator()
+    
+    def field_generator(self):
+        man = self.manifold.copy()
+        man.fill_gd(self.manifold.gd)
+        #for i in range(len(self.module_list)):
+        #    man[i].fill_cotan(self.__controls[i].view(-1))
+        man.fill_cotan(self.__controls)
+        return man.cot_to_vs(self.__sigma)
     
     def compute_geodesic_control_from_self(self, manifold):
         """ assume man is of the same type and has the same gd as self.__man"""

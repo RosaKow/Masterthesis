@@ -128,16 +128,18 @@ def largeDeformation_unconstrained(module, states, controls, points):
     return phi
 
 import matplotlib.pyplot as plt
-def plot_grid(gridx,gridy, color='blue', figsize=(5,5), dpi=100):
+def plot_grid(gridx,gridy, xlim, ylim, color='blue', figsize=(5,5), dpi=100):
     fig1 = plt.figure(figsize=figsize, dpi=dpi)  
     ax = fig1.add_subplot(1, 1, 1) 
+    plt.xlim(xlim)
+    plt.ylim(ylim)
     for i in range(gridx.shape[0]):
         ax.plot(gridx[i,:], gridy[i,:], color=color)
     for i in range(gridx.shape[1]):
         ax.plot(gridx[:,i], gridy[:,i], color=color)
     return fig1
         
-def plot_MultiGrid(phi, grid, label):
+def plot_MultiGrid(phi, grid, label, xlim, ylim):
     '''input: grid = [gridx, gridy]
               phi = [phi1, phi2, phi_background] 
                       final deformation of gridpoints (as a grid)
@@ -150,7 +152,7 @@ def plot_MultiGrid(phi, grid, label):
             x[i,j] = phi[label[i,j].numpy().astype(int)][0][i,j]
             y[i,j] = phi[label[i,j].numpy().astype(int)][1][i,j]
             
-    plot_grid(x, y, color='blue')
+    plot_grid(x, y,xlim, ylim, color='blue')
     return x,y
         
 
