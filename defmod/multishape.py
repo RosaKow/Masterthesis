@@ -194,7 +194,7 @@ class MultiShapeModule(torch.nn.Module):
     
     def compute_geodesic_variables(self, constr):
         
-        self.compute_geodesic_control(self.manifold)
+        self.compute_geodesic_control_from_self(self.manifold)
 
         fields = self.field_generator().fieldlist
         constr_mat = constr.constraintsmatrix(self)
@@ -210,30 +210,17 @@ class MultiShapeModule(torch.nn.Module):
 
         tmp = torch.mm(torch.transpose(constr_mat,0,1), lambda_qp)
         
-        # build compound manifold of all silent points (that belong to the boundary constraints) and the background manifold
-        man_list = [man[0].copy(retain_grad=True) for man in self.manifold.manifold_list[:-1]]
-        man = dm.manifold.CompoundManifold([*man_list, self.background.manifold.copy(retain_grad=True)])
+        man = self.__manifold.copy(retain_grad=True)
         
         c = 0
         for m in man.manifold_list[:-1]:
-            m.cotan = tmp[c:c+m.numel_gd].view(-1)
-            c = c+m.numel_gd
+            m.manifold_list[0].cotan = m.manifold_list[0].cotan - tmp[c:c+m.manifold_list[0].numel_gd].view(-1)
+            c = c+m.manifold_list[0].numel_gd
         for m in man.manifold_list[-1].manifold_list:
-            m.cotan = tmp[c:c+m.numel_gd].view(-1)
+            m.cotan = m.cotan - tmp[c:c+m.numel_gd].view(-1)
             c = c+m.numel_gd
         
-        #self.compute_geodesic_control(man)
-        
-        for mod, m in zip(self.module_list, man.manifold_list):
-            mod.compute_geodesic_control(m)
-            h1 = mod.controls
-            mod.compute_geodesic_control(mod.manifold)
-            h2 = mod.controls
-            print('h1', h1)
-            print('h2', h2)
-            print('================')
-            mod.fill_controls([h1[i]- h2[i] for i in range(len(h1))])
-        
+        self.compute_geodesic_control_from_self(man)
         h_qp = self.controls
                                         
         return lambda_qp, h_qp
@@ -249,10 +236,3 @@ class MultiShapeModule(torch.nn.Module):
         # TODO: check manifold and self.manifold have the same type
         for m, man in zip(self.__module_list, manifold.manifold_list):            
             m.compute_geodesic_control_from_self(man)
-
-
-class MultiShapeLDDMM(MultiShapeModule):
-    ''' creates a multishape module that uses only local translations, corresponding to the multishape LDDMM framework '''
-    def __init__(self, man_list, sigma_list):
-        module_list = [CompoundModule([Translations(man, sigma)]) for man, sigma in zip(man_list, sigma_list[:-1]) ]
-        super().__init__(module_list, sigma_background = sigma_list[-1], reduce_background=False)
