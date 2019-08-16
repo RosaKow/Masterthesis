@@ -1063,8 +1063,11 @@ class ConstrainedTranslations(DeformationModule):
         return self.compute_geodesic_control(man)
     
     def autoaction(self):
-        support = self.__supportgen(gd)
-        K_q = sum(K_xy(support.view(-1, self.__manifold.dim)[i,:], self.manifold.gd.view(-1, self.__manifold.dim), self.__sigma))
+        support = self.__supportgen(self.__manifold.gd.view(-1, 2))
+        vectors = self.__vectorgen(self.__manifold.gd.view(-1, 2))
+        K_q = sum([K_xy(support.view(-1, self.__manifold.dim)[i,:], self.manifold.gd.view(-1, self.__manifold.dim), self.__sigma) 
+                   * vectors[i,:]
+                   for i in range(len(support.view(-1,self.__manifold.dim)))])
 
         return torch.mm(K_q.view(2,1), K_q.view(1,2))
     

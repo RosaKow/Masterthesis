@@ -110,14 +110,14 @@ class Save_Results:
         for i in range(len(fig_grid)-1):
             p = "%s%s%d%s" % (path, 'grid', i, '.png')
             fig_grid[i].savefig(p)
-        p = "%s%s" % (path, 'grid_multi.png')
+        p = "%s%s" % (path, 'grid_final.png')
         fig_grid[-1].savefig(p)
         
         params = { 'Hamiltonian': self.__H,
                   'source' : self.__source,
                   'target' : self.__target}
         p = "%s%s" % (path, 'params.p')
-        pickle.dump(params, p)
+        pickle.dump(params, open(p, 'wb'))
         
         
 class Save_Results_MultiShape(Save_Results):
