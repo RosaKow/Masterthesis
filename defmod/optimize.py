@@ -23,7 +23,7 @@ class BFGS():
         Y = torch.tensor(P).requires_grad_()
         return self.__energyfun.gradE_autograd(self.__gd0, Y).detach().numpy()
 
-    def __call__(self, maxiter):
+    def __call__(self, maxiter, gtol=1e-03, eps=1e-08):
         res = scipy.optimize.minimize(self.fun, self.__mom0,
                               method='BFGS',
                               jac=self.jac,
@@ -31,8 +31,8 @@ class BFGS():
                               tol=None,
                               callback=None,
                               options={
-                                  'gtol': 1e-03,
-                                  'eps': 1e-08,
+                                  'gtol': gtol,
+                                  'eps': eps,
                                   'maxiter': maxiter,
                                   'disp' : self.__disp
                               })

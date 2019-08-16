@@ -373,7 +373,7 @@ class organs(RegistrationData):
         
 import pickle
 
-class Nuts(RegistrationData):
+class Nut(RegistrationData):
     def __init__(self, sigma_scaling=1.):
         super().__init__()
         self.__source = None
@@ -410,14 +410,19 @@ class Nuts(RegistrationData):
         man_scal2 = dm.manifold.Landmarks(2,1,gd=gd1)
         
         silent = dm.deformationmodules.SilentPoints(man_silent)
-        scal1 = dm.deformationmodules.LocalScaling(man_scal1, sigma = self.__sigma_scaling)
-        scal2 = dm.deformationmodules.LocalScaling(man_scal2, sigma = self.__sigma_scaling)
-        trans = dm.deformationmodules.Translations(dm.manifold.Landmarks(2,1,gd = torch.tensor([0.,0.]).view(-1).requires_grad_()), sigma=400, coeff=5.)
+        #scal1 = dm.deformationmodules.LocalScaling(man_scal1, sigma = self.__sigma_scaling)
+        #scal2 = dm.deformationmodules.LocalScaling(man_scal2, sigma = self.__sigma_scaling)
+        
+        scal1 = dm.deformationmodules.ConstrainedTranslations_Scaling(man_scal1, sigma = self.__sigma_scaling)
+        scal2 = dm.deformationmodules.ConstrainedTranslations_Scaling(man_scal2, sigma = self.__sigma_scaling)
+        
+        globaltrans = dm.deformationmodules.Translations(dm.manifold.Landmarks(2,1,gd = torch.tensor([0.,0.]).view(-1)), sigma=400, coeff=5.)
+        trans = dm.deformationmodules.Translations(dm.manifold.Landmarks(2, len(self.__source[0]), gd=self.__source[0].view(-1)), sigma=0.2, coeff=10.)
 
-        comp1 = dm.deformationmodules.CompoundModule([silent, scal1, scal2, trans])
+        comp1 = dm.deformationmodules.CompoundModule([silent, scal1, scal2, globaltrans, trans])
         
         self.__modules = [comp1]
-            
+                  
     def __call__(self):
         dty = torch.float64
         with open('../data/nuts/nutsdata.pickle', 'rb') as f:
@@ -433,4 +438,41 @@ class Nuts(RegistrationData):
         self.__source = [source]
         self.__target = [target]
         
-        self.build_modules()        
+        self.build_modules()
+        
+class Multi_Nuts(RegistrationData):
+    def __init__(self):
+        super().__init__()
+        self.__source = None
+        self.__target = None
+        self.__modules = None
+        
+    @property
+    def source(self):
+        return self.__source
+    
+    @property
+    def target(self):
+        return self.__target
+    
+    @property
+    def modules(self):
+        return self.__modules    
+        
+    def __call__(self):
+        Nut1 = Nut()
+        Nut1()
+        
+        Nut2 = Nut()
+        Nut2()
+        # translate Nut source
+        transvec = torch.tensor([1.,1.5])
+        trans_nut_source = Nut2.source[0] + torch.ones(len(Nut2.source[0]),1) * transvec
+        # translate Nut target
+        transvec = torch.tensor([-1.,1.5])
+        trans_nut_target = Nut2.target[0] * torch.tensor([-1.,1.]) + torch.ones(len(Nut2.target[0]),1) * transvec
+        
+        self.__source = [Nut1.source[0], trans_nut_source]
+        self.__target = [Nut1.target[0], trans_nut_target]
+        
+        self.__modules = [Nut1.modules[0], Nut2.modules[0]]

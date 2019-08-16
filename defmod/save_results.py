@@ -23,6 +23,7 @@ class Save_Results:
         self.__init_gd = H.module.manifold.gd
         
         self.__it = it
+        H.geodesic_controls()
         self.__states, self.__controls = shoot_euler(H, it)     
         self.__H.module.manifold.fill_gd(self.__init_gd)
         self.__H.module.manifold.fill_cotan(self.__init_cotan)
@@ -76,8 +77,19 @@ class Save_Results:
         return fig_list
                       
             
-    def save_all(self):
-        self.__gridpoints(xlim, ylim, d)
+    def save(self, path):
+              
+        fig_states = self.fig_states()
+        for i in range(len(fig_states)):
+            p = "%s%s%d%s" % (path, 'shooting', i, '.png')
+            fig_states[i].savefig(p)
+            
+        fig_grid = self.fig_grid()
+        for i in range(len(fig_grid)-1):
+            p = "%s%s%d%s" % (path, 'grid', i, '.png')
+            fig_grid[i].savefig(p)
+        p = "%s%s" % (path, 'grid_multi.png')
+        fig_grid[-1].savefig(p)
         
         
         
@@ -126,7 +138,7 @@ class Save_Results_MultiShape(Save_Results):
         grid_final = grid_intermediate[-1]
         return grid_final, grid_intermediate
      
-    def fig_grids(self, show=False):
+    def fig_grid(self, show=False):
         """ Plots final deformed grid for each submodule """
         # Works for two shapes in a background
         # TO DO: Make it general for more submodules
@@ -152,10 +164,12 @@ class Save_Results_MultiShape(Save_Results):
         label = point_labels(self.__source, self.__gridpoints).view(nx, ny)
 
         plt.figure()
-        plot_MultiGrid([[x1,y1], [x2,y2], [x3,y3]], [x, y], xlim=xlim, ylim=ylim,label=label)
+        fig_multigrid = plot_MultiGrid([[x1,y1], [x2,y2], [x3,y3]], [x, y], xlim=xlim, ylim=ylim,label=label)
         
         if show == True:
             plt.show()
+                                    
+        return fig_grid1, fig_grid2, fig_grid_bg, fig_multigrid
             
     
 class Save_Results_SingleShape(Save_Results):
@@ -240,9 +254,9 @@ class Save_Results_SingleShape(Save_Results):
         x, y = dm.usefulfunctions.vec2grid(grid_final[0].view(-1,dim), nx,ny)
         
         fig_grid = plot_grid(x.detach().numpy(), y.detach().numpy(), color = 'blue', xlim=xlim, ylim=ylim, figsize=self.__figsize, dpi=self.__dpi)
-        plt.scatter(self.__states[-1][1].gd.view(-1,2)[:, 0].detach().numpy(), self.__states[-1][1].gd.view(-1,2)[:, 1].detach().numpy(), c='r')
+
 
         if show == True:
             plt.axis('equal')
             plt.show()
-                
+        return [fig_grid]

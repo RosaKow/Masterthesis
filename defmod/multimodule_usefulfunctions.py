@@ -152,8 +152,8 @@ def plot_MultiGrid(phi, grid, label, xlim, ylim):
             x[i,j] = phi[label[i,j].numpy().astype(int)][0][i,j]
             y[i,j] = phi[label[i,j].numpy().astype(int)][1][i,j]
             
-    plot_grid(x, y,xlim, ylim, color='blue')
-    return x,y
+    fig = plot_grid(x, y,xlim, ylim, color='blue')
+    return fig
         
 
 ########################################################

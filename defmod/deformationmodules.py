@@ -948,6 +948,13 @@ class ConstrainedTranslations(DeformationModule):
         self.__direc_scaling_pts = torch.tensor([[1., 0.], [-0.5 , 0.5* a],  [-0.5, -0.5* a]], requires_grad=True)
         self.__direc_scaling_vec = torch.tensor([[1., 0.], [-0.5 , 0.5* a],  [-0.5, -0.5* a]], requires_grad=True)
 
+    def copy(self, retain_grad=False):
+        mod_copy = ConstrainedTranslations(self.__manifold.copy(retain_grad=retain_grad), self.__supportgen, self.__vectorgen, self.__sigma, self.__coeff)
+        if retain_grad==True:
+            mod_copy.fill_controls(self.__controls.clone())
+        elif retain_grad==False:
+            mod_copy.fill_controls(self.__controls.detach().clone().requires_grad_())   
+        return mod_copy
     
     @classmethod
     def build_from_points(cls, dim, nb_pts, sigma, gd=None, tan=None, cotan=None):
@@ -1024,7 +1031,7 @@ class ConstrainedTranslations(DeformationModule):
         v = StructuredField_0(pts,
                                  self.__vectorgen(gd), self.__sigma)
         apply = man.inner_prod_field(v)
-        self.fill_controls(2 * apply.contiguous())
+        self.fill_controls(2 * apply.contiguous().view(-1))
         #gd = self.__manifold.gd.view(-1, 2)
         #self.__controls =torch.sum(self.__supportgen(gd)**2)
     
@@ -1055,3 +1062,22 @@ class ConstrainedTranslations(DeformationModule):
     
     def costop_inv(self):
         return torch.eye(self.__dim_controls)
+    
+class ConstrainedTranslations_Scaling(ConstrainedTranslations):
+    def __init__(self, manifold, sigma, coeff=1):
+        sigma_scaling = 1.
+        
+        a = torch.sqrt(torch.tensor(3.))
+        direc_scaling_pts = torch.tensor([[1., 0.], [-0.5 , 0.5* a],  [-0.5, -0.5* a]], requires_grad=True, dtype=torch.float64)
+        direc_scaling_vec =  torch.tensor([[1., 0.], [-0.5 , 0.5* a],  [-0.5, -0.5* a]], requires_grad=True, dtype=torch.float64)
+        def support_generator(x):
+            centre = x.view(1,2).repeat(3,1)
+            return centre + 0.3 * sigma_scaling * direc_scaling_pts
+
+        def vector_generator(x):
+            return direc_scaling_vec
+        
+        
+        
+        super().__init__(manifold, support_generator, vector_generator, sigma, coeff=1)
+        
