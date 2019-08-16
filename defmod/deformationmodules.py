@@ -966,6 +966,14 @@ class ConstrainedTranslations(DeformationModule):
         return self.__manifold
     
     @property
+    def support_generator(self):
+        return self.__supportgen
+    
+    @property
+    def vector_generator(self):
+        return self.__vectorgen
+    
+    @property
     def sigma(self):
         return self.__sigma
     
@@ -1076,8 +1084,6 @@ class ConstrainedTranslations_Scaling(ConstrainedTranslations):
 
         def vector_generator(x):
             return direc_scaling_vec
-        
-        
         
         super().__init__(manifold, support_generator, vector_generator, sigma, coeff=1)
         

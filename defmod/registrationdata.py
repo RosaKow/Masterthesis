@@ -466,7 +466,7 @@ class Multi_Nuts(RegistrationData):
         Nut2 = Nut()
         Nut2()
         # translate Nut source
-        transvec = torch.tensor([1.,1.5])
+        transvec = torch.tensor([-1.,1.5])
         trans_nut_source = Nut2.source[0] + torch.ones(len(Nut2.source[0]),1) * transvec
         # translate Nut target
         transvec = torch.tensor([-1.,1.5])

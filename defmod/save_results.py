@@ -2,9 +2,10 @@ from defmod.shooting import shoot_euler, shoot_euler_silent
 from defmod.multimodule_usefulfunctions import point_labels, gridpoints, plot_grid, plot_MultiGrid
 import matplotlib.pyplot as plt
 import torch
+import pickle
 import defmod as dm
 from defmod.manifold import Landmarks
-from defmod.deformationmodules import CompoundModule, SilentPoints
+from defmod.deformationmodules import CompoundModule, SilentPoints, Translations, ConstrainedTranslations, ConstrainedTranslations_Scaling
 from defmod.multishape import MultiShapeModule
 
 
@@ -53,17 +54,34 @@ class Save_Results:
         self.__grid = [x,y]
         return x,y, gridpts
         
+        
+    def plot_controls(self, module, controls, manifold):
+        if isinstance(module, Translations):
+            support = manifold.gd.detach().view(-1,2)
+            plt.quiver(support[:,0], support[:,1], controls.detach().view(-1,2)[:,0], controls.detach().view(-1,2)[:,1], color='b')
+        if isinstance(module, ConstrainedTranslations_Scaling):
+            support = module.support_generator(manifold.gd.detach().view(-1,2)).detach()
+            vectors = controls.detach() * module.vector_generator(manifold.gd.detach().view(-1,2)).detach()
+            plt.quiver(support[:,0], support[:,1], vectors[:,0], vectors[:,1], color='b')
+        if isinstance(module, SilentPoints):
+            pass
+
     
-    def fig_states(self, show=False):
+    def fig_states(self, plot_controls = False, show=False):
         """ Plots a separate figure with source, target and state for each state during shooting """
         fig_list = []
         
-        for s in self.__states:  
+        for s, cont in zip(self.__states, self.__controls):  
             if isinstance(s.gd[0], torch.Tensor):
                 s = [s]
             fig_shooting = plt.figure(figsize = self.__figsize, dpi=self.__dpi)
-            for i in range(len(list(s))):
+            
+            for i in range(len(list(s))-1):
                 plt.scatter(s[i][0].gd.view(-1,2)[:, 0].detach().numpy(), s[i][0].gd.view(-1,2)[:, 1].detach().numpy(), c='r')
+                for j in range(len(list(s[i]))):
+                    plt.scatter(s[i][j].gd.view(-1,2)[:, 0].detach().numpy(), s[i][j].gd.view(-1,2)[:, 1].detach().numpy(), 'xb')
+                    if plot_controls == True:
+                        self.plot_controls(self.__H.module.module_list[i][j], cont[i][j], s[i][j])
 
             for i in range(len(self.__source)):
                 plt.plot(self.__target[i][:, 0].detach().numpy(), self.__target[i][:, 1].detach().numpy(), 'xk')
@@ -79,7 +97,11 @@ class Save_Results:
             
     def save(self, path):
               
-        fig_states = self.fig_states()
+        fig_states = self.fig_states(plot_controls = True)
+        for i in range(len(fig_states)):
+            p = "%s%s%d%s" % (path, 'shooting_wControls', i, '.png')
+            fig_states[i].savefig(p)
+        fig_states = self.fig_states(plot_controls = False)
         for i in range(len(fig_states)):
             p = "%s%s%d%s" % (path, 'shooting', i, '.png')
             fig_states[i].savefig(p)
@@ -91,6 +113,11 @@ class Save_Results:
         p = "%s%s" % (path, 'grid_multi.png')
         fig_grid[-1].savefig(p)
         
+        params = { 'Hamiltonian': self.__H,
+                  'source' : self.__source,
+                  'target' : self.__target}
+        p = "%s%s" % (path, 'params.p')
+        pickle.dump(params, p)
         
         
 class Save_Results_MultiShape(Save_Results):
@@ -220,15 +247,17 @@ class Save_Results_SingleShape(Save_Results):
         grid_final = grid_states[-1].gd
         return grid_final, grid_states
     
-    def fig_states(self, show=False):
+    def fig_states(self, plot_controls = False, show=False):
         """ Plots a separate figure with source, target and state for each state during shooting """
         fig_list = []
         
-        for s in self.__states: 
+        for s, cont in zip(self.__states, self.__controls): 
             
             fig_shooting = plt.figure(figsize = self.__figsize, dpi=self.__dpi)
             for i in range(len(list(s))):
                 plt.scatter(s[i].gd.view(-1,2)[:, 0].detach().numpy(), s[i].gd.view(-1,2)[:, 1].detach().numpy(), c='r')
+                if plot_controls == True:
+                    self.plot_controls(self.__H.module.module_list[i], cont[i], s[i])
 
             for i in range(len(self.__source)):
                 plt.plot(self.__target[i][:, 0].detach().numpy(), self.__target[i][:, 1].detach().numpy(), 'xk')
