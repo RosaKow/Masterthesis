@@ -1039,11 +1039,11 @@ class ConstrainedTranslations(DeformationModule):
         
         gd = self.__manifold.gd.view(-1, 2)
         pts = self.__supportgen(gd)
-        cont = self.__controls * self.__vectorgen(gd)
+        cont = self.__vectorgen(gd)
         K_q = K_xx(pts, self.__sigma)
         m = torch.mm(K_q, cont)
         c = torch.dot(m.view(-1), cont.view(-1))
-        self.fill_controls( c *  apply.contiguous().view(-1))
+        self.fill_controls( (1/c) *  apply.contiguous().view(-1))
         
         #gd = self.__manifold.gd.view(-1, 2)
         #self.__controls =torch.sum(self.__supportgen(gd)**2)
@@ -1080,7 +1080,7 @@ class ConstrainedTranslations(DeformationModule):
     def costop_inv(self):
         gd = self.__manifold.gd.view(-1, 2)
         pts = self.__supportgen(gd)
-        cont = self.__controls * self.__vectorgen(gd)
+        cont = self.__vectorgen(gd)
         K_q = K_xx(pts, self.__sigma)
         m = torch.mm(K_q, cont)
         c = torch.dot(m.view(-1), cont.view(-1))

@@ -416,8 +416,8 @@ class Nut(RegistrationData):
         scal1 = dm.deformationmodules.ConstrainedTranslations_Scaling(man_scal1, sigma = self.__sigma_scaling)
         scal2 = dm.deformationmodules.ConstrainedTranslations_Scaling(man_scal2, sigma = self.__sigma_scaling)
         
-        globaltrans = dm.deformationmodules.Translations(dm.manifold.Landmarks(2,1,gd = torch.tensor([0.,0.]).view(-1)), sigma=400)#, coeff=5.)
-        trans = dm.deformationmodules.Translations(dm.manifold.Landmarks(2, len(self.__source[0]), gd=self.__source[0].view(-1)), sigma=0.2)#, coeff=10.)
+        globaltrans = dm.deformationmodules.Translations(dm.manifold.Landmarks(2,1,gd = torch.tensor([0.,0.]).view(-1)), sigma=400, coeff=5.)
+        trans = dm.deformationmodules.Translations(dm.manifold.Landmarks(2, len(self.__source[0]), gd=self.__source[0].view(-1)), sigma=0.2, coeff=10.)
 
         comp1 = dm.deformationmodules.CompoundModule([silent, scal1, scal2, globaltrans, trans])
         
@@ -476,3 +476,7 @@ class Multi_Nuts(RegistrationData):
         self.__target = [Nut1.target[0], trans_nut_target]
         
         self.__modules = [Nut1.modules[0], Nut2.modules[0]]
+        self.__modules[1][1].manifold.fill_gd(torch.tensor([-2,1.5], requires_grad=True).view(-1))
+        self.__modules[1][2].manifold.fill_gd(torch.tensor([0,1.5], requires_grad=True).view(-1))
+        self.__modules[1][3].manifold.fill_gd(torch.tensor([-1,1.5], requires_grad=True).view(-1))
+        self.__modules[1][4].manifold.fill_gd(self.source[1].view(-1).requires_grad_())
