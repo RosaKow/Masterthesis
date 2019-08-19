@@ -416,8 +416,8 @@ class Nut(RegistrationData):
         scal1 = dm.deformationmodules.ConstrainedTranslations_Scaling(man_scal1, sigma = self.__sigma_scaling)
         scal2 = dm.deformationmodules.ConstrainedTranslations_Scaling(man_scal2, sigma = self.__sigma_scaling)
         
-        globaltrans = dm.deformationmodules.Translations(dm.manifold.Landmarks(2,1,gd = torch.tensor([0.,0.]).view(-1)), sigma=400, coeff=5.)
-        trans = dm.deformationmodules.Translations(dm.manifold.Landmarks(2, len(self.__source[0]), gd=self.__source[0].view(-1)), sigma=0.2, coeff=10.)
+        globaltrans = dm.deformationmodules.Translations(dm.manifold.Landmarks(2,1,gd = torch.tensor([0.,0.]).view(-1)), sigma=400)#, coeff=5.)
+        trans = dm.deformationmodules.Translations(dm.manifold.Landmarks(2, len(self.__source[0]), gd=self.__source[0].view(-1)), sigma=0.2)#, coeff=10.)
 
         comp1 = dm.deformationmodules.CompoundModule([silent, scal1, scal2, globaltrans, trans])
         

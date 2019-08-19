@@ -1,9 +1,11 @@
 import torch
 import scipy.optimize
 
+class Optimizer:
+    def __init__(self):
+        super().__init__()
 
-
-class BFGS():
+class BFGS(Optimizer):
     
     def __init__(self, EnergyFunctional, X, disp=True):
         ''' Optimizes the Energyfunctional using Scipy BFGS Algorithm'''
@@ -37,3 +39,6 @@ class BFGS():
                                   'disp' : self.__disp
                               })
         return torch.tensor(res.x)
+    
+    
+    

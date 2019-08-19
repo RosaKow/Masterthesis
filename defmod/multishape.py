@@ -205,7 +205,7 @@ class MultiShapeModule(torch.nn.Module):
         B = torch.mm(constr_mat, gd_action.view(-1,1))
         A = torch.mm(torch.mm(constr_mat, self.autoaction_silent()), torch.transpose(constr_mat,0,1))
             
-        lambda_qp,_ = torch.gesv(B, A)
+        lambda_qp,_ = torch.solve(B, A)
         self.fill_l(lambda_qp)
 
         tmp = torch.mm(torch.transpose(constr_mat,0,1), lambda_qp)

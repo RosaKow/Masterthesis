@@ -111,8 +111,8 @@ class Translations(DeformationModule):
         """Computes geodesic control from StructuredField vs."""
         vs = self.adjoint(man)
         K_q = K_xx(self.manifold.gd.view(-1, self.__manifold.dim), self.__sigma)
-        controls, _ = torch.gesv(vs(self.manifold.gd.view(-1, self.manifold.dim)), self.__coeff * K_q)
-        self.__controls = controls.contiguous().view(-1)
+        controls, _ =  torch.gesv(vs(self.manifold.gd.view(-1, self.manifold.dim)), K_q)
+        self.__controls = 1/self.__coeff * controls.contiguous().view(-1)
         
     def compute_geodesic_control_from_self(self, manifold):
         """ Computes geodesic control on manifold of same type as self.manifold"""
@@ -134,7 +134,7 @@ class Translations(DeformationModule):
     def autoaction(self):
         """ computes matrix for autoaction = xi zeta Z^-1 zeta^\ast xi^\ast """
         ## Kernelmatrix K_qq
-        return kronecker_I2(K_xx(self.manifold.gd.view(-1, self.__manifold.dim), self.__sigma))
+        return self.__coeff * kronecker_I2(K_xx(self.manifold.gd.view(-1, self.__manifold.dim), self.__sigma)) 
     
     def costop_inv(self):
         ''' Inverse Cost operator. corresponds to Kernel if the cost is the norm of the vector field'''
@@ -635,7 +635,7 @@ class GlobalTranslation(DeformationModule):
         """Computes geodesic control from StructuredField."""
         vs = self.adjoint(man)
         
-        self.fill_controls(vs(self.z()).contiguous().view(-1))
+        self.fill_controls(1/self.__coeff * vs(self.z()).contiguous().view(-1))
         #self.__translationmodule.manifold.fill_gd(self.z().view(-1))
         #self.__translationmodule.compute_geodesic_control(man) 
         #self.fill_controls(self.__translationmodule.controls)
@@ -655,7 +655,7 @@ class GlobalTranslation(DeformationModule):
         """ computes matrix for autoaction = xi zeta Z^-1 zeta^\ast xi^\ast """
         # TO DO: add coefficient
         K = K_xy(self.manifold.gd.view(-1, self.manifold.dim), self.z(), self.__sigma)
-        return kronecker_I2(torch.mm(K, torch.transpose(K,0,1)))
+        return self.__coeff * kronecker_I2(torch.mm(K, torch.transpose(K,0,1)))
     
     def costop_inv(self):
         return (1./self.__coeff) * torch.eye(self.dim_controls)
@@ -1014,13 +1014,10 @@ class ConstrainedTranslations(DeformationModule):
         gd = self.__manifold.gd.view(-1, 2)
         pts = self.__supportgen(gd)
         #cont = self.__controls * self.__vectorgen(gd)
-        
-        
+
         #pts = self.__manifold.gd.view(-1, 2)
         cont = self.__controls * self.__vectorgen(gd)
-        
-        
-        
+
         K_q = K_xx(pts, self.__sigma)
         m = torch.mm(K_q, cont)
         #manifold_Landmark = Landmarks(self.__manifold.dim, self.__manifold.dim + 1, gd=self.__supportgen(gd).view(-1))
@@ -1039,7 +1036,15 @@ class ConstrainedTranslations(DeformationModule):
         v = StructuredField_0(pts,
                                  self.__vectorgen(gd), self.__sigma)
         apply = man.inner_prod_field(v)
-        self.fill_controls(2 * apply.contiguous().view(-1))
+        
+        gd = self.__manifold.gd.view(-1, 2)
+        pts = self.__supportgen(gd)
+        cont = self.__controls * self.__vectorgen(gd)
+        K_q = K_xx(pts, self.__sigma)
+        m = torch.mm(K_q, cont)
+        c = torch.dot(m.view(-1), cont.view(-1))
+        self.fill_controls( c *  apply.contiguous().view(-1))
+        
         #gd = self.__manifold.gd.view(-1, 2)
         #self.__controls =torch.sum(self.__supportgen(gd)**2)
     
@@ -1063,16 +1068,23 @@ class ConstrainedTranslations(DeformationModule):
         return self.compute_geodesic_control(man)
     
     def autoaction(self):
+        
         support = self.__supportgen(self.__manifold.gd.view(-1, 2))
         vectors = self.__vectorgen(self.__manifold.gd.view(-1, 2))
         K_q = sum([K_xy(support.view(-1, self.__manifold.dim)[i,:], self.manifold.gd.view(-1, self.__manifold.dim), self.__sigma) 
                    * vectors[i,:]
                    for i in range(len(support.view(-1,self.__manifold.dim)))])
 
-        return torch.mm(K_q.view(2,1), K_q.view(1,2))
+        return self.__coeff * torch.mm(K_q.view(2,1), K_q.view(1,2))
     
     def costop_inv(self):
-        return torch.eye(self.__dim_controls)
+        gd = self.__manifold.gd.view(-1, 2)
+        pts = self.__supportgen(gd)
+        cont = self.__controls * self.__vectorgen(gd)
+        K_q = K_xx(pts, self.__sigma)
+        m = torch.mm(K_q, cont)
+        c = torch.dot(m.view(-1), cont.view(-1))
+        return 1 / c * torch.eye(self.__dim_controls)
     
 class ConstrainedTranslations_Scaling(ConstrainedTranslations):
     def __init__(self, manifold, sigma, coeff=1):
