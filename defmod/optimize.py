@@ -14,7 +14,10 @@ class BFGS(Optimizer):
         self.__mom0 = X[1].detach().numpy()
         self.__gd0 = X[0]
         self.__disp = disp
-    
+        self.__iter_states = []
+        
+    def iter_states(self, x):
+        self.__iter_states.append(x)
     
     
     def fun(self, P):
@@ -31,14 +34,14 @@ class BFGS(Optimizer):
                               jac=self.jac,
                               bounds=None,
                               tol=None,
-                              callback=None,
+                              callback=self.iter_states,
                               options={
                                   'gtol': gtol,
                                   'eps': eps,
                                   'maxiter': maxiter,
                                   'disp' : self.__disp
                               })
-        return torch.tensor(res.x)
+        return torch.tensor(res.x), self.__iter_states
     
     
     

@@ -417,7 +417,7 @@ class Nut(RegistrationData):
         scal2 = dm.deformationmodules.ConstrainedTranslations_Scaling(man_scal2, sigma = self.__sigma_scaling)
         
         globaltrans = dm.deformationmodules.Translations(dm.manifold.Landmarks(2,1,gd = torch.tensor([0.,0.]).view(-1)), sigma=400, coeff=5.)
-        trans = dm.deformationmodules.Translations(dm.manifold.Landmarks(2, len(self.__source[0]), gd=self.__source[0].view(-1)), sigma=0.2, coeff=10.)
+        trans = dm.deformationmodules.Translations(dm.manifold.Landmarks(2, len(self.__source[0]), gd=self.__source[0].view(-1).requires_grad_()), sigma=0.2, coeff=10.)
 
         comp1 = dm.deformationmodules.CompoundModule([silent, scal1, scal2, globaltrans, trans])
         
@@ -440,12 +440,16 @@ class Nut(RegistrationData):
         
         self.build_modules()
         
-class Multi_Nuts(RegistrationData):
-    def __init__(self):
+class Nut_translated(RegistrationData):
+    def __init__(self, source_transvec=[0.,0.], target_transvec=[0.,0.], reflect_target=1.):
         super().__init__()
         self.__source = None
         self.__target = None
         self.__modules = None
+        
+        self.__reflect = reflect_target
+        self.__source_transvec = source_transvec
+        self.__target_transvec = target_transvec
         
     @property
     def source(self):
@@ -462,21 +466,41 @@ class Multi_Nuts(RegistrationData):
     def __call__(self):
         Nut1 = Nut()
         Nut1()
+
+        self.__source = [Nut1.source[0] + torch.ones(len(Nut1.source[0]),1) * torch.tensor(self.__source_transvec).view(-1,2)]
+        #self.__target = [Nut1.target[0] + torch.ones(len(Nut1.target[0]),1) * torch.tensor(self.__target_transvec).view(-1,2)]     
+        self.__target = [Nut1.target[0]* torch.tensor([self.__reflect,1.]) + torch.ones(len(Nut1.target[0]),1) * torch.tensor(self.__target_transvec).view(-1,2)]
         
-        Nut2 = Nut()
-        Nut2()
-        # translate Nut source
-        transvec = torch.tensor([-1.,1.5])
-        trans_nut_source = Nut2.source[0] + torch.ones(len(Nut2.source[0]),1) * transvec
-        # translate Nut target
-        transvec = torch.tensor([-1.,1.5])
-        trans_nut_target = Nut2.target[0] * torch.tensor([-1.,1.]) + torch.ones(len(Nut2.target[0]),1) * transvec
+        self.build_modules()
         
-        self.__source = [Nut1.source[0], trans_nut_source]
-        self.__target = [Nut1.target[0], trans_nut_target]
+    def build_modules(self):
+        dty = torch.float64
         
-        self.__modules = [Nut1.modules[0], Nut2.modules[0]]
-        self.__modules[1][1].manifold.fill_gd(torch.tensor([-2,1.5], requires_grad=True).view(-1))
-        self.__modules[1][2].manifold.fill_gd(torch.tensor([0,1.5], requires_grad=True).view(-1))
-        self.__modules[1][3].manifold.fill_gd(torch.tensor([-1,1.5], requires_grad=True).view(-1))
-        self.__modules[1][4].manifold.fill_gd(self.source[1].view(-1).requires_grad_())
+        gd_scal1 = torch.tensor([-1., 0.], requires_grad=True, dtype=dty) + torch.tensor(self.__source_transvec).view(-1)
+        gd_scal2 = torch.tensor([1., 0.], requires_grad=True, dtype=dty)  + torch.tensor(self.__source_transvec).view(-1)
+        gd_trans = torch.tensor([0., 0.], requires_grad=True, dtype=dty) + torch.tensor(self.__source_transvec).view(-1)
+        gd0 = [self.__source[0].clone().view(-1).requires_grad_(), gd_scal1, gd_scal2, gd_trans, self.__source[0].clone().view(-1).requires_grad_()]
+    
+        mod_list = []
+        for gd in [gd0]:
+            
+            nb_pts = gd[0].view(-1,2).shape[0]
+            man_silent = dm.manifold.Landmarks(2, nb_pts, gd=gd[0])
+            man_scal1 = dm.manifold.Landmarks(2,1,gd=gd[1])
+            man_scal2 = dm.manifold.Landmarks(2,1,gd=gd[2])
+
+            silent = dm.deformationmodules.SilentPoints(man_silent)
+
+            scal1 = dm.deformationmodules.ConstrainedTranslations_Scaling(man_scal1, sigma = 1.)
+            scal2 = dm.deformationmodules.ConstrainedTranslations_Scaling(man_scal2, sigma = 1.)
+
+            globaltrans = dm.deformationmodules.Translations(dm.manifold.Landmarks(2,1,gd=gd[3]), sigma=400, coeff=5.)
+            trans = dm.deformationmodules.Translations(dm.manifold.Landmarks(2, len(self.__source[0]), gd=gd[4]), sigma=0.2, coeff=10.)
+
+            comp = dm.deformationmodules.CompoundModule([silent, scal1, scal2, globaltrans, trans])
+
+            mod_list.append(comp)
+
+        self.__modules = mod_list
+        
+        

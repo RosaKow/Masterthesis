@@ -10,7 +10,7 @@ from defmod.multishape import MultiShapeModule
 
 class Save_Results:
 
-    def __init__(self, H, source, target, it=10, figsize=(5,5), dpi=100):
+    def __init__(self, H, source, target, Energy, time=None, iter_states=None, it=10, figsize=(5,5), dpi=100):
         """ Input: Hamiltonian
                     target: Target shape
                     it: number of iterations for shooting
@@ -21,6 +21,9 @@ class Save_Results:
         self.__source = source
         self.__init_cotan = H.module.manifold.cotan
         self.__init_gd = H.module.manifold.gd
+        self.__iter_states = iter_states
+        self.__time = time
+        self.__Energy = Energy
 
         self.__it = it
         H.geodesic_controls()
@@ -54,7 +57,7 @@ class Save_Results:
         return x,y, gridpts
 
 
-    def fig_states(self, show=False):
+    def fig_states(self, show=False, axeslim = None):
         """ Plots a separate figure with source, target and state for each state during shooting """
         fig_list = []
 
@@ -70,12 +73,10 @@ class Save_Results:
                 plt.plot(self.__source[i][:, 0].detach().numpy(), self.__source[i][:, 1].detach().numpy(), '.k')
 
             plt.axis('equal')
-            if not xlim==None:
+            if not axeslim==None:
                 axes = plt.gca()
                 axes.set_xlim([xmin,xmax])
                 axes.set_ylim([ymin,ymax])
-            if not ylim==None:
-                plt.ylim(ylim)
             fig_list.append(fig_shooting)
 
         if show == True:
@@ -97,17 +98,30 @@ class Save_Results:
             fig_grid[i].savefig(p)
         p = "%s%s" % (path, 'grid_multi.png')
         fig_grid[-1].savefig(p)
-
+        
+        params = { 'Hamiltonian' : self.__H,
+                   'source' : self.__source,
+                   'target' : self.__target,
+                   'Energyfunctional' : self.__Energy,
+                   'iter_states' : self.__iter_states,
+                   'time' : self.__time,
+                 }
+        p = "%s%s" % (path, 'params.p')
+        with open(p, 'wb') as f:
+            pickle.dump(params, f)
 
 
 class Save_Results_MultiShape(Save_Results):
-    def __init__(self, H, source, target, it=10, figsize=(5,5), dpi=100):
+    def __init__(self, H, source, target, Energy, time=None, iter_states=None, it=10, figsize=(5,5), dpi=100):
         self.__H = H
         self.__target = target
         self.__source = source
         self.__init_cotan = H.module.manifold.cotan
         self.__init_gd = H.module.manifold.gd
-
+        self.__iter_states = iter_states
+        self.__time = time
+        self.__Energy = Energy
+        
         self.__it = it
         self.__states, self.__controls = shoot_euler(H, it)
         self.__H.module.manifold.fill_gd(self.__init_gd)
@@ -119,7 +133,7 @@ class Save_Results_MultiShape(Save_Results):
 
         self.__figsize = figsize
         self.__dpi = dpi
-        super().__init__(H, source, target, it=10, figsize=(5,5), dpi=100)
+        super().__init__(H, source, target, Energy, time=time, iter_states=iter_states, it=10, figsize=(5,5), dpi=100)
 
 
     def gridpoints(self, xlims, ylims, d):
@@ -180,13 +194,16 @@ class Save_Results_MultiShape(Save_Results):
 
 
 class Save_Results_SingleShape(Save_Results):
-    def __init__(self, H, source, target, it=10, figsize=(5,5), dpi=100):
+    def __init__(self, H, source, target, Energy, time=None, iter_states=None, it=10, figsize=(5,5), dpi=100):
         self.__H = H
         self.__target = target
         self.__source = source
         self.__init_cotan = H.module.manifold.cotan
         self.__init_gd = H.module.manifold.gd
-
+        self.__iter_states = iter_states
+        self.__time = time
+        self.__Energy = Energy
+        
         self.__it = it
         self.__states, self.__controls = shoot_euler(H, it)
         self.__H.module.manifold.fill_gd(self.__init_gd)
@@ -198,8 +215,7 @@ class Save_Results_SingleShape(Save_Results):
 
         self.__figsize = figsize
         self.__dpi = dpi
-        super().__init__(H, source, target, it=10, figsize=(5,5), dpi=100)
-        super().__init__(H, source, target, it=10, figsize=(5,5), dpi=100)
+        super().__init__(H, source, target, Energy, time=time, iter_states=iter_states, it=10, figsize=(5,5), dpi=100)
 
     def gridpoints(self, xlims, ylims, d):
         """ Builds a grid specified by x-and y-limits and distance between gridpoints
