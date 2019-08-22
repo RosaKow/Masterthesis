@@ -1088,17 +1088,17 @@ class ConstrainedTranslations(DeformationModule):
     
 class ConstrainedTranslations_Scaling(ConstrainedTranslations):
     def __init__(self, manifold, sigma, coeff=1):
-        sigma_scaling = 1.
+        self.__sigma_scaling = 1.
         
         a = torch.sqrt(torch.tensor(3.))
-        direc_scaling_pts = torch.tensor([[1., 0.], [-0.5 , 0.5* a],  [-0.5, -0.5* a]], requires_grad=True, dtype=torch.float64)
-        direc_scaling_vec =  torch.tensor([[1., 0.], [-0.5 , 0.5* a],  [-0.5, -0.5* a]], requires_grad=True, dtype=torch.float64)
-        def support_generator(x):
-            centre = x.view(1,2).repeat(3,1)
-            return centre + 0.3 * sigma_scaling * direc_scaling_pts
+        self.__direc_scaling_pts = torch.tensor([[1., 0.], [-0.5 , 0.5* a],  [-0.5, -0.5* a]], requires_grad=True, dtype=torch.float64)
+        self.__direc_scaling_vec =  torch.tensor([[1., 0.], [-0.5 , 0.5* a],  [-0.5, -0.5* a]], requires_grad=True, dtype=torch.float64)
+        
+        super().__init__(manifold, self.support_generator, self.vector_generator, sigma, coeff=1)
+        
+    def vector_generator(self, x):
+        return self.__direc_scaling_vec
 
-        def vector_generator(x):
-            return direc_scaling_vec
-        
-        super().__init__(manifold, support_generator, vector_generator, sigma, coeff=1)
-        
+    def support_generator(self, x):
+        centre = x.view(1,2).repeat(3,1)
+        return centre + 0.3 * self.__sigma_scaling * self.__direc_scaling_pts

@@ -1,6 +1,7 @@
 import math
 pi = math.pi
 import torch
+import pickle
 import defmod as dm
 import defmod.hamiltonian_multishape as hamiltonian
 
@@ -441,7 +442,7 @@ class Nut(RegistrationData):
         self.build_modules()
         
 class Nut_translated(RegistrationData):
-    def __init__(self, source_transvec=[0.,0.], target_transvec=[0.,0.], reflect_target=1.):
+    def __init__(self, source_transvec=[0.,0.], target_transvec=[0.,0.], reflect_target=1., undersample=1):
         super().__init__()
         self.__source = None
         self.__target = None
@@ -450,6 +451,7 @@ class Nut_translated(RegistrationData):
         self.__reflect = reflect_target
         self.__source_transvec = source_transvec
         self.__target_transvec = target_transvec
+        self.__undersample = undersample
         
     @property
     def source(self):
@@ -466,10 +468,11 @@ class Nut_translated(RegistrationData):
     def __call__(self):
         Nut1 = Nut()
         Nut1()
+        s = Nut1.source[0][0::self.__undersample,:]
+        t = Nut1.target[0][0::self.__undersample,:]
 
-        self.__source = [Nut1.source[0] + torch.ones(len(Nut1.source[0]),1) * torch.tensor(self.__source_transvec).view(-1,2)]
-        #self.__target = [Nut1.target[0] + torch.ones(len(Nut1.target[0]),1) * torch.tensor(self.__target_transvec).view(-1,2)]     
-        self.__target = [Nut1.target[0]* torch.tensor([self.__reflect,1.]) + torch.ones(len(Nut1.target[0]),1) * torch.tensor(self.__target_transvec).view(-1,2)]
+        self.__source = [s + torch.ones(len(s),1) * torch.tensor(self.__source_transvec).view(-1,2)]
+        self.__target = [t* torch.tensor([self.__reflect,1.]) + torch.ones(len(t),1) * torch.tensor(self.__target_transvec).view(-1,2)]
         
         self.build_modules()
         

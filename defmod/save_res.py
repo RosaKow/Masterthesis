@@ -2,6 +2,7 @@ from defmod.shooting import shoot_euler, shoot_euler_silent
 from defmod.multimodule_usefulfunctions import point_labels, gridpoints, plot_grid, plot_MultiGrid
 import matplotlib.pyplot as plt
 import torch
+import pickle
 import defmod as dm
 from defmod.manifold import Landmarks
 from defmod.deformationmodules import CompoundModule, SilentPoints
@@ -57,16 +58,20 @@ class Save_Results:
         return x,y, gridpts
 
 
-    def fig_states(self, show=False, axeslim = None):
+    def fig_states(self, show=False, axeslim = None, plot_gd=None):
         """ Plots a separate figure with source, target and state for each state during shooting """
         fig_list = []
+        if plot_gd == None:
+            plot_gd = [True for i in range(len(list(self.__states[0][0])))]
 
         for s in self.__states:
             if isinstance(s.gd[0], torch.Tensor):
                 s = [s]
             fig_shooting = plt.figure(figsize = self.__figsize, dpi=self.__dpi)
             for i in range(len(list(s))):
-                plt.scatter(s[i][0].gd.view(-1,2)[:, 0].detach().numpy(), s[i][0].gd.view(-1,2)[:, 1].detach().numpy(), c='r')
+                for j in range(len(list(s[i]))):
+                    if plot_gd[j] == True:
+                        plt.scatter(s[i][j].gd.view(-1,2)[:, 0].detach().numpy(), s[i][j].gd.view(-1,2)[:, 1].detach().numpy(), c='r')
 
             for i in range(len(self.__source)):
                 plt.plot(self.__target[i][:, 0].detach().numpy(), self.__target[i][:, 1].detach().numpy(), 'xk')
@@ -75,8 +80,8 @@ class Save_Results:
             plt.axis('equal')
             if not axeslim==None:
                 axes = plt.gca()
-                axes.set_xlim([xmin,xmax])
-                axes.set_ylim([ymin,ymax])
+                axes.set_xlim(axeslim[0])
+                axes.set_ylim(axeslim[1])
             fig_list.append(fig_shooting)
 
         if show == True:
