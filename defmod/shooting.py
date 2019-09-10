@@ -27,29 +27,13 @@ def shoot_euler(h, it):
         
     for i in range(it):
         h.geodesic_controls()
-        #print('constr',h.constraints(h.module))
-        #mod = h.module.copy()
-        
-        #speed_action = [gdi.action(modulei).tan for gdi, modulei in zip(h.module.manifold.manifold_list, h.module)] 
-        
+       
         l = [*h.module.manifold.unroll_gd(), *h.module.manifold.unroll_cotan()]
         delta = grad(h(), l, create_graph=True, allow_unused=True)
         
         d_gd = h.module.manifold.roll_gd(list(delta[:int(len(delta)/2)]))
         d_mom = h.module.manifold.roll_cotan(list(delta[int(len(delta)/2):]))
-        
-        
-        #print('d_gd Hamiltonian______________________')
-        #print(d_gd)        
-        
-        #mod.manifold.fill(intermediate_states[0])
-              
-        #print('d_gd field generator__________________')
-        #print(mod.field_generator()(mod.manifold.gd))
-        
-        #print('========================================')
-        
- 
+
         h.module.manifold.muladd_gd(d_mom, step)
         h.module.manifold.muladd_cotan(d_gd, -step)
         
@@ -62,12 +46,6 @@ def shoot_euler(h, it):
 
 def shoot_euler_silent(h, points, it):
     step = 1. / it
-     
-    #compound_silent = []
-    #man_grid = dm.manifold.Landmarks(h.module.manifold.dim, nb_pts = len(points), gd=points.clone().view(-1).requires_grad_())
-    #SilentGrid = dm.deformationmodules.SilentPoints(man_grid)
-    #for m in h.module.module_list[:-1]:
-    #    compound_silent.append(dm.deformationmodules.CompoundModule([*m.module_list.copy(), SilentGrid.copy()]))
     
     multi_silent = MultiShapeModule_silent([m.copy() for m in h.module.module_list[:-1]], sigma_background = h.module.background.sigma, silentpoints=points)
     multi_silent.fill_cotan_without_silentpoints(h.module.manifold.cotan)

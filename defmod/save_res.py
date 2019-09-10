@@ -61,27 +61,45 @@ class Save_Results:
     def fig_states(self, show=False, axeslim = None, plot_gd=None):
         """ Plots a separate figure with source, target and state for each state during shooting """
         fig_list = []
-        if plot_gd == None:
-            plot_gd = [True for i in range(len(list(self.__states[0][0])))]
+        #if plot_gd == None:
+        #    plot_gd = [True for i in range(len(list(self.__states[0][0])))]
 
         for s in self.__states:
             if isinstance(s.gd[0], torch.Tensor):
                 s = [s]
             fig_shooting = plt.figure(figsize = self.__figsize, dpi=self.__dpi)
             for i in range(len(list(s))):
-                for j in range(len(list(s[i]))):
-                    if plot_gd[j] == True:
-                        plt.scatter(s[i][j].gd.view(-1,2)[:, 0].detach().numpy(), s[i][j].gd.view(-1,2)[:, 1].detach().numpy(), c='r')
-
-            for i in range(len(self.__source)):
-                plt.plot(self.__target[i][:, 0].detach().numpy(), self.__target[i][:, 1].detach().numpy(), 'xk')
-                plt.plot(self.__source[i][:, 0].detach().numpy(), self.__source[i][:, 1].detach().numpy(), '.k')
+                
+                for j in range(len(list(s[i]))-1):
+                    print(s[i][j])
+                    print(s[i])
+                    if plot_gd[j] == 'scatter':
+                        plt_state = plt.scatter(s[i][j].gd.view(-1,2)[:, 0].detach().numpy(), s[i][j].gd.view(-1,2)[:, 1].detach().numpy(), c='r')#), marker='x')
+                    elif plot_gd[j] == 'plot':
+                        plt_state = plt.plot(s[i][j].gd.view(-1,2)[:, 0].detach().numpy(), s[i][j].gd.view(-1,2)[:, 1].detach().numpy(), c='r')
+                    elif plot_gd[j] == 'grid':
+                        xlim, ylim, _, n = self.__grid_params
+                        nx, ny = n
+                        x1, y1 = dm.usefulfunctions.vec2grid(grid_final[0], nx,ny)
+                        for i in range(gridx.shape[0]):
+                            fig_shooting.plot(gridx[i,:], gridy[i,:], color=blue)
+                        for i in range(gridx.shape[1]):
+                            fig_shooting.plot(gridx[:,i], gridy[:,i], color=blue)
+                    else:
+                        pass
+            for i in range(len(self.__source)):                    
+                #plt_target =  plt.plot(self.__target[i][:, 0].detach().numpy(), self.__target[i][:, 1].detach().numpy(), c='k')#, 'xk')
+                #plt_source = plt.plot(self.__source[i][:, 0].detach().numpy(), self.__source[i][:, 1].detach().numpy(), c='b')#, '.k')
+                plt_target =  plt.scatter(self.__target[i][:, 0].detach().numpy(), self.__target[i][:, 1].detach().numpy(), c='k', marker='x')
+                plt_source = plt.scatter(self.__source[i][:, 0].detach().numpy(), self.__source[i][:, 1].detach().numpy(), c='b', marker='.')
 
             plt.axis('equal')
             if not axeslim==None:
                 axes = plt.gca()
                 axes.set_xlim(axeslim[0])
                 axes.set_ylim(axeslim[1])
+                plt.legend((plt_state[0], plt_target[0], plt_source[0]),('state','target','source'))
+
             fig_list.append(fig_shooting)
 
         if show == True:
@@ -90,9 +108,9 @@ class Save_Results:
         return fig_list
 
 
-    def save(self, path):
+    def save(self, path, axeslim=None, plot_gd=None):
 
-        fig_states = self.fig_states()
+        fig_states = self.fig_states(axeslim=axeslim, plot_gd=plot_gd)
         for i in range(len(fig_states)):
             p = "%s%s%d%s" % (path, 'shooting', i, '.png')
             fig_states[i].savefig(p)
@@ -248,7 +266,7 @@ class Save_Results_SingleShape(Save_Results):
         grid_final = grid_states[-1].gd
         return grid_final, grid_states
 
-    def fig_states(self, show=False, axeslim=None):
+    def fig_states(self, show=False, axeslim=None, plot_gd=None):
         """ Plots a separate figure with source, target and state for each state during shooting """
         fig_list = []
 
@@ -256,16 +274,19 @@ class Save_Results_SingleShape(Save_Results):
 
             fig_shooting = plt.figure(figsize = self.__figsize, dpi=self.__dpi)
             for i in range(len(list(s))):
-                plt.scatter(s[i].gd.view(-1,2)[:, 0].detach().numpy(), s[i].gd.view(-1,2)[:, 1].detach().numpy(), c='r')
-
+                if plot_gd[i]=='scatter':
+                    plt.scatter(s[i].gd.view(-1,2)[:, 0].detach().numpy(), s[i].gd.view(-1,2)[:, 1].detach().numpy(), c='r')#, marker='x')
+                elif plot_gd[i]=='plot':
+                    plt_state = plt.plot(s[i].gd.view(-1,2)[:, 0].detach().numpy(), s[i].gd.view(-1,2)[:, 1].detach().numpy(), c='r')
             for i in range(len(self.__source)):
-                plt.plot(self.__target[i][:, 0].detach().numpy(), self.__target[i][:, 1].detach().numpy(), 'xk')
-                plt.plot(self.__source[i][:, 0].detach().numpy(), self.__source[i][:, 1].detach().numpy(), '.k')
+                plt_target = plt.plot(self.__target[i][:, 0].detach().numpy(), self.__target[i][:, 1].detach().numpy(), c='k')#, 'xk')
+                plt_source = plt.plot(self.__source[i][:, 0].detach().numpy(), self.__source[i][:, 1].detach().numpy(), c='b')#, '.k')
             plt.axis('equal')
             if not axeslim==None:
                 axes = plt.gca()
                 axes.set_xlim(axeslim[0:2])
                 axes.set_ylim(axeslim[2:4])
+                plt.legend((plt_state[0], plt_target[0], plt_source[0]),('state','target','source'))
 
             fig_list.append(fig_shooting)
 
